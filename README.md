@@ -16,20 +16,26 @@ The tool is designed for macOS with cron scheduling in mind: drop a queue YAML i
 - tmux (`brew install tmux`)
 - `claude` CLI — [Claude Code](https://claude.ai/code) (`npm install -g @anthropic-ai/claude-code` or similar)
 - python3 (macOS system Python is sufficient — stdlib only, no pip installs needed)
-- Google Chrome with a Claude extension installed (Profile 5 is currently hardcoded)
+- Google Chrome with Claude Code extension installed
 - `reattach-to-user-namespace` (optional, `brew install reattach-to-user-namespace` — fixes keychain access in tmux)
 
 ## Installation
 
-```bash
-git clone https://github.com/yourusername/tq.git
-cd tq
-bash scripts/tq-install.sh
+Install as a Claude Code plugin:
+
+```
+/plugin install https://github.com/kevnk/tq
+```
+
+Then install the CLI tools to your PATH by running the plugin's install command inside Claude:
+
+```
+/install
 ```
 
 This symlinks `tq` and `tq-status` into `/opt/homebrew/bin` (or `/usr/local/bin` on Intel Macs) and creates `~/.claude/queues/` and `~/.claude/logs/`.
 
-To install to a custom location:
+To install to a custom location, run the install script directly:
 
 ```bash
 TQ_INSTALL_DIR=/usr/local/bin bash scripts/tq-install.sh
@@ -139,12 +145,12 @@ Run this via cron every 30 minutes to keep state accurate even if sessions die u
 **Step 1 — Parse**: `tq` runs an embedded Python script (written to a temp file) that reads the queue YAML and generates three files per task, all named by an 8-character SHA-256 hash of the prompt:
 
 - `<hash>.prompt` — the raw prompt text
-- `<hash>.launch.py` — a Python launcher that will `execvp` into `claude`
+- `<hash>.launch.py` — a small Python launcher that `execvp`s into `claude` (replacing itself with the claude process so the tmux window ends up running claude directly)
 - `~/.tq/sessions/<hash>/settings.json` — Claude settings registering a Stop hook
 
 **Step 2 — Auth capture**: The Python parser reads the Claude OAuth token from the macOS keychain (`security find-generic-password -s 'Claude Code-credentials'`) and bakes it into the launcher script. This means each task has its credentials embedded and can run unattended even in a cron context.
 
-**Step 3 — Spawn**: For each pending task, `tq` creates a named tmux session (`tq-<slug>-<epoch>`) and sends `python3 <hash>.launch.py` to it. The launcher opens Chrome Profile 5, waits 2 seconds, then replaces itself with `claude --dangerously-skip-permissions --chrome <prompt>`.
+**Step 3 — Spawn**: For each pending task, `tq` creates a named tmux session (`tq-<slug>-<epoch>`) and sends `python3 <hash>.launch.py` to it via `tmux send-keys`. The launcher runs inside the tmux window, then `execvp`s into `claude --dangerously-skip-permissions --chrome <prompt>`, replacing itself so the window ends up running a live `claude` session.
 
 **Step 4 — Completion**: When `claude` finishes, the Stop hook (`on-stop.sh`) fires automatically and updates the task's state file: `status=running` → `status=done`. The next `tq` run will skip this task.
 
