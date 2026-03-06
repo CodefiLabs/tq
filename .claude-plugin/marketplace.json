@@ -1,19 +1,23 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "tq",
   "description": "Claude task queue runner — batch Claude prompts into tmux sessions via YAML queue files",
+  "owner": {
+    "name": "Kevin Kirchner",
+    "email": "kevnk@hey.com"
+  },
   "plugins": [
     {
       "name": "tq",
-      "version": "1.0.0",
       "description": "Claude task queue runner — batch Claude prompts into tmux sessions via YAML queue files",
+      "version": "1.0.0",
       "author": {
         "name": "Kevin Kirchner",
         "email": "kevnk@hey.com"
       },
-      "repository": "https://github.com/kevnk/tq",
-      "license": "MIT",
-      "keywords": ["queue", "tmux", "claude", "batch", "cron", "automation"],
-      "source": "https://github.com/kevnk/tq"
+      "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/kevnk/tq"
     }
   ]
 }
