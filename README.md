@@ -21,10 +21,14 @@ The tool is designed for macOS with cron scheduling in mind: drop a queue YAML i
 
 ## Installation
 
-Install as a Claude Code plugin:
+Clone the repo, then install as a Claude Code plugin from the local path:
+
+```bash
+git clone https://github.com/kevnk/tq ~/tq
+```
 
 ```
-/plugin install https://github.com/kevnk/tq
+/plugin install ~/tq
 ```
 
 Then install the CLI tools to your PATH by running the plugin's install command inside Claude:
