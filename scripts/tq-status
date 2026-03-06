@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+QUEUE_FILE="${1:-}"
+if [[ -z "$QUEUE_FILE" ]]; then
+  echo "Usage: tq-status <queue-yaml-file>" >&2
+  exit 1
+fi
+
+QUEUE_FILE="$(realpath "$QUEUE_FILE")"
+if [[ ! -f "$QUEUE_FILE" ]]; then
+  echo "Error: queue file not found: $QUEUE_FILE" >&2
+  exit 1
+fi
+
+QUEUE_DIR="$(dirname "$QUEUE_FILE")"
+QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
+STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
+
+if [[ ! -d "$STATE_DIR" ]]; then
+  echo "No state found for $QUEUE_FILE (run tq first)"
+  exit 0
+fi
+
+printf "%-10s %-25s %-22s %s\n" "STATUS" "SESSION" "STARTED" "PROMPT"
+printf "%-10s %-25s %-22s %s\n" "----------" "-------------------------" "----------------------" "------"
+
+for STATE_FILE in "$STATE_DIR"/*; do
+  [[ -f "$STATE_FILE" ]] || continue
+  # Skip non-state files (.prompt, .launch.py)
+  [[ "$STATE_FILE" == *.prompt ]] && continue
+  [[ "$STATE_FILE" == *.launch.py ]] && continue
+
+  STATUS="$(grep '^status=' "$STATE_FILE" | cut -d= -f2)"
+  SESSION="$(grep '^session=' "$STATE_FILE" | cut -d= -f2)"
+  STARTED="$(grep '^started=' "$STATE_FILE" | cut -d= -f2)"
+
+  # Prefer first line of .prompt file for display; fall back to state file's prompt= line
+  HASH="$(basename "$STATE_FILE")"
+  PROMPT_FILE="$STATE_DIR/$HASH.prompt"
+  if [[ -f "$PROMPT_FILE" ]]; then
+    PROMPT="$(head -1 "$PROMPT_FILE")"
+  else
+    PROMPT="$(grep '^prompt=' "$STATE_FILE" | cut -d= -f2-)"
+  fi
+
+  # Update stale running states
+  if [[ "$STATUS" == "running" ]]; then
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+      sed -i '' 's/^status=running/status=done/' "$STATE_FILE"
+      STATUS="done"
+    fi
+  fi
+
+  # Truncate prompt for display
+  PROMPT_SHORT="${PROMPT:0:60}"
+  [[ ${#PROMPT} -gt 60 ]] && PROMPT_SHORT="${PROMPT_SHORT}..."
+
+  printf "%-10s %-25s %-22s %s\n" "$STATUS" "$SESSION" "$STARTED" "$PROMPT_SHORT"
+done

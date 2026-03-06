@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure homebrew binaries are available (cron has minimal PATH)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+QUEUE_FILE="${1:-}"
+if [[ -z "$QUEUE_FILE" ]]; then
+  echo "Usage: tq <queue-yaml-file>" >&2
+  exit 1
+fi
+
+QUEUE_FILE="$(realpath "$QUEUE_FILE")"
+if [[ ! -f "$QUEUE_FILE" ]]; then
+  echo "Error: queue file not found: $QUEUE_FILE" >&2
+  exit 1
+fi
+
+QUEUE_DIR="$(dirname "$QUEUE_FILE")"
+QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
+STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
+mkdir -p "$STATE_DIR"
+
+# ---------------------------------------------------------------------------
+# Step 1: Write Python parser to a temp file and run it.
+# Outputs one JSON line per task: {"hash":"...", "first_line":"..."}
+# (Using a temp file avoids bash 3.2 bug: single quotes inside <<'HEREDOC'
+#  inside $() are incorrectly scanned by the quote counter.)
+# ---------------------------------------------------------------------------
+PARSE_SCRIPT=$(mktemp /tmp/tq-parse-XXXXXX.py)
+trap 'rm -f "$PARSE_SCRIPT"' EXIT
+
+cat > "$PARSE_SCRIPT" <<'PYEOF'
+import sys, os, hashlib, re, json, stat
+
+queue_file = sys.argv[1]
+state_dir  = sys.argv[2]
+sessions_dir = os.path.expanduser('~/.tq/sessions')
+os.makedirs(sessions_dir, exist_ok=True)
+
+with open(queue_file) as f:
+    text = f.read()
+
+lines = text.split('\n')
+
+# Extract top-level cwd
+cwd = ''
+for line in lines:
+    m = re.match(r'^cwd:\s*(.+)$', line)
+    if m:
+        cwd = m.group(1).strip().strip('"\'')
+        break
+
+# Parse tasks -- handle inline, block literal (|), block folded (>), quoted
+i = 0
+while i < len(lines):
+    m = re.match(r'^  - prompt:\s*(.*)', lines[i])
+    if not m:
+        i += 1
+        continue
+
+    inline = m.group(1).strip()
+
+    if inline in ('|', '>'):
+        # Block scalar: collect indented continuation lines
+        block_lines = []
+        j = i + 1
+        indent = None
+        while j < len(lines):
+            line = lines[j]
+            stripped = line.lstrip()
+            if not stripped:
+                if indent is not None:
+                    block_lines.append('')
+                j += 1
+                continue
+            cur_indent = len(line) - len(stripped)
+            if indent is None:
+                indent = cur_indent
+            if cur_indent < indent:
+                break
+            block_lines.append(line[indent:])
+            j += 1
+        # Remove trailing blank lines
+        while block_lines and not block_lines[-1]:
+            block_lines.pop()
+        if inline == '>':
+            out = []
+            for bl in block_lines:
+                out.append('\n' if bl == '' else bl)
+            prompt = ' '.join(out).strip()
+        else:
+            prompt = '\n'.join(block_lines)
+        i = j
+    else:
+        # Inline prompt -- strip surrounding quotes if present
+        prompt = inline
+        if len(prompt) >= 2 and (
+            (prompt[0] == '"' and prompt[-1] == '"') or
+            (prompt[0] == "'" and prompt[-1] == "'")
+        ):
+            prompt = prompt[1:-1]
+        i += 1
+
+    prompt = prompt.strip()
+    if not prompt:
+        continue
+
+    h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
+    first_line = prompt.split('\n')[0][:80]
+
+    # Write prompt file
+    prompt_file = os.path.join(state_dir, h + '.prompt')
+    with open(prompt_file, 'w') as f:
+        f.write(prompt)
+
+    # --- Session directory: ~/.tq/sessions/<hash>/ ---
+    session_dir  = os.path.join(sessions_dir, h)
+    hooks_dir    = os.path.join(session_dir, 'hooks')
+    settings_file = os.path.join(session_dir, 'settings.json')
+    stop_hook     = os.path.join(hooks_dir, 'on-stop.sh')
+    state_file    = os.path.join(state_dir, h)
+    os.makedirs(hooks_dir, exist_ok=True)
+
+    # Write settings.json with Stop hook
+    settings = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": stop_hook
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    with open(settings_file, 'w') as f:
+        json.dump(settings, f, indent=2)
+
+    # Write on-stop.sh -- marks task done and sends macOS notification
+    # Escape single quotes in first_line for shell safety
+    safe_first_line = first_line.replace("'", "'\\''")
+    stop_script = '#!/bin/bash\n'
+    stop_script += '# Mark tq task done\n'
+    stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
+    stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
+    stop_script += "  sed -i '' 's/^status=running/status=done/' \"$STATE_FILE\"\n"
+    stop_script += 'fi\n'
+    with open(stop_hook, 'w') as f:
+        f.write(stop_script)
+    os.chmod(stop_hook, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+    # Capture Claude auth at tq-run time (keychain is accessible in this context).
+    # Priority: read live credentials from macOS keychain, fall back to env vars.
+    captured_env = {}
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-a', os.environ.get('USER', ''), '-w'],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            creds = json.loads(result.stdout.strip())
+            oauth = creds.get('claudeAiOauth', {})
+            if oauth.get('accessToken'):
+                # Set CLAUDE_CODE_OAUTH_KEY to the current live token from keychain
+                captured_env['CLAUDE_CODE_OAUTH_KEY'] = oauth['accessToken']
+    except Exception:
+        pass
+    # Fall back to env vars if keychain read failed
+    for k in ['CLAUDE_CODE_OAUTH_KEY', 'ANTHROPIC_API_KEY']:
+        if k not in captured_env and k in os.environ:
+            captured_env[k] = os.environ[k]
+
+    # Write Python launcher -- execs claude with per-session settings, no shell quoting issues
+    launcher_file = os.path.join(state_dir, h + '.launch.py')
+    with open(launcher_file, 'w') as f:
+        f.write('#!/usr/bin/env python3\n')
+        f.write('import os\n')
+        f.write('cwd = ' + json.dumps(cwd) + '\n')
+        f.write('prompt_file = ' + json.dumps(prompt_file) + '\n')
+        f.write('settings_file = ' + json.dumps(settings_file) + '\n')
+        # Inject auth env vars captured at queue-run time
+        for k, v in captured_env.items():
+            f.write('os.environ[' + json.dumps(k) + '] = ' + json.dumps(v) + '\n')
+        f.write('if cwd:\n')
+        f.write('    os.chdir(cwd)\n')
+        f.write('import shutil, subprocess, time\n')
+        f.write('prompt = open(prompt_file).read()\n')
+        f.write('# Open Chrome with Profile 5 (halbotkirchner@gmail.com) before connecting\n')
+        f.write('subprocess.Popen(["open", "-a", "Google Chrome", "--args", "--profile-directory=Profile 5"])\n')
+        f.write('time.sleep(2)\n')
+        f.write('# Use reattach-to-user-namespace if available (macOS tmux keychain fix)\n')
+        f.write('reattach = shutil.which("reattach-to-user-namespace")\n')
+        f.write('if reattach:\n')
+        f.write("    os.execvp(reattach, [reattach, 'claude', '--settings', settings_file, '--dangerously-skip-permissions', '--chrome', prompt])\n")
+        f.write('else:\n')
+        f.write("    os.execvp('claude', ['claude', '--settings', settings_file, '--dangerously-skip-permissions', '--chrome', prompt])\n")
+
+    print(json.dumps({'hash': h, 'first_line': first_line}))
+
+PYEOF
+
+PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "$QUEUE_FILE" "$STATE_DIR")
+
+if [[ -z "$PARSE_OUTPUT" ]]; then
+  echo "No tasks found in $QUEUE_FILE" >&2
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: For each parsed task, check state and spawn if pending.
+# ---------------------------------------------------------------------------
+while IFS= read -r JSON_LINE; do
+  HASH="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['hash'])" "$JSON_LINE")"
+  FIRST_LINE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['first_line'])" "$JSON_LINE")"
+  STATE_FILE="$STATE_DIR/$HASH"
+  LAUNCHER="$STATE_DIR/$HASH.launch.py"
+
+  # Check existing state
+  if [[ -f "$STATE_FILE" ]]; then
+    STATUS="$(grep '^status=' "$STATE_FILE" | cut -d= -f2)"
+    if [[ "$STATUS" == "done" ]]; then
+      echo "  [done]    $FIRST_LINE"
+      continue
+    fi
+    if [[ "$STATUS" == "running" ]]; then
+      SESSION="$(grep '^session=' "$STATE_FILE" | cut -d= -f2)"
+      if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "  [running] $FIRST_LINE"
+        continue
+      else
+        # Session died -- mark done
+        sed -i '' 's/^status=running/status=done/' "$STATE_FILE"
+        echo "  [done]    $FIRST_LINE (session ended)"
+        continue
+      fi
+    fi
+  fi
+
+  # Generate session/window names from first line of prompt
+  EPOCH_SUFFIX="$(date +%s | tail -c 6)"
+  SESSION_BASE="$(echo "$FIRST_LINE" | awk '{print $1" "$2" "$3}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+  SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
+  WINDOW="$(echo "$FIRST_LINE" | awk '{print $1" "$2}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
+
+  # Write state file
+  cat > "$STATE_FILE" <<EOF
+status=running
+session=$SESSION
+window=$WINDOW
+prompt=$FIRST_LINE
+started=$(date -u +%Y-%m-%dT%H:%M:%S)
+EOF
+
+  # Spawn tmux session.
+  # IMPORTANT: start the window WITHOUT a command so tmux uses the user's default
+  # shell (zsh). Zsh sources .zshrc and has CLAUDE_CODE_OAUTH_KEY + keychain access.
+  # Then send the launch command via send-keys so it runs inside that authenticated shell.
+  tmux start-server
+  tmux has-session -t "$SESSION" 2>/dev/null || tmux new-session -d -s "$SESSION"
+  WIN_IDX=$(tmux new-window -P -F '#{window_index}' -t "$SESSION" -n "$WINDOW")
+  tmux send-keys -t "$SESSION:$WIN_IDX" "python3 '$LAUNCHER'" Enter
+  (sleep 10 && tmux send-keys -t "$SESSION:$WIN_IDX" "" Enter) &
+
+  echo "  [spawned] $SESSION -- $FIRST_LINE"
+done <<< "$PARSE_OUTPUT"
