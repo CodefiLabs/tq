@@ -1,0 +1,4 @@
+# Runtime task dirs — contain plaintext OAuth tokens
+.tq/
+
+.ai-onboard-scratch/

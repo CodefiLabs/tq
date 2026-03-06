@@ -143,7 +143,7 @@ while i < len(lines):
     # Write on-stop.sh -- marks task done and sends macOS notification
     # Escape single quotes in first_line for shell safety
     safe_first_line = first_line.replace("'", "'\\''")
-    stop_script = '#!/bin/bash\n'
+    stop_script = '#!/usr/bin/env bash\n'
     stop_script += '# Mark tq task done\n'
     stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
     stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
