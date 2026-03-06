@@ -27,9 +27,21 @@ Run this in your terminal:
 curl -fsSL https://raw.githubusercontent.com/kevnk/tq/main/scripts/tq-install.sh | bash
 ```
 
-This registers the marketplace, installs the Claude plugin, and symlinks `tq` and `tq-status` into your PATH in one step.
+Here's exactly what that command does:
 
-To install to a custom PATH location:
+1. **Downloads the install script** from this repo over HTTPS (`-fsSL` = fail on error, silent, follow redirects) and pipes it directly to `bash` — nothing is saved to disk.
+
+2. **Registers the tq marketplace** with Claude Code by running `claude plugin marketplace add kevnk/tq`. This clones the tq repo into `~/.claude/plugins/marketplaces/tq/` so Claude knows where to find it.
+
+3. **Installs the tq plugin** by running `claude plugin install tq@tq`. This caches the plugin files into `~/.claude/plugins/cache/tq/tq/<version>/` and registers the plugin's skills and slash commands with Claude Code. After this, Claude will recognize commands like `/todo`, `/schedule`, `/jobs`, and `/health`.
+
+4. **Symlinks `tq` and `tq-status`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so both commands are available in your shell and in cron jobs.
+
+5. **Creates `~/.claude/queues/` and `~/.claude/logs/`** — the default directories for queue files and log output.
+
+If `claude` is not on your PATH, steps 2–3 are skipped with a warning and only the CLI tools are installed.
+
+To install the CLI tools to a custom location instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kevnk/tq/main/scripts/tq-install.sh | TQ_INSTALL_DIR=/usr/local/bin bash
