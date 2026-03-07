@@ -48,7 +48,7 @@ else
   exit 1
 fi
 
-for SCRIPT in tq; do
+for SCRIPT in tq tq-message; do
   SRC="$PLUGIN_ROOT/scripts/$SCRIPT"
   DEST="$INSTALL_DIR/$SCRIPT"
   if [[ -L "$DEST" ]]; then

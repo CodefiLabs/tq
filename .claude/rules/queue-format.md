@@ -12,6 +12,26 @@ Queue files are YAML files passed to `tq` as the first argument.
 - `prompt` — the Claude prompt to run (string, required)
 - `name` — optional human-readable label for tmux session naming (string)
 
+## Queue-Level Messaging
+
+Add an optional `message:` block at the top level to configure notifications for this queue.
+Overrides `~/.tq/message.yaml` global config.
+
+```yaml
+message:
+  service: telegram       # which service (telegram | slack)
+  content: summary        # summary | status | details | log (default: summary)
+  chat_id: "-100123456"  # override global chat_id for this queue
+```
+
+**Content types:**
+- `summary` — Claude writes a 2-3 sentence digest of what it accomplished (requires live session)
+- `status` — task name, done/failed, duration (no Claude required)
+- `details` — prompt first line, status, duration, hash (no Claude required)
+- `log` — last 200 lines of tmux pane scrollback (no Claude required)
+
+**Global credentials** go in `~/.tq/message.yaml` — never in queue files (queue files may be shared).
+
 ## Minimal Example
 
 ```yaml
