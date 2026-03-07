@@ -9,6 +9,7 @@ PROMPT_MODE=0
 PROMPT_TEXT=""
 TASK_NAME="adhoc"
 TASK_CWD=""
+NOTIFY=""
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -16,6 +17,7 @@ while [[ $# -gt 0 ]]; do
     --prompt) PROMPT_TEXT="${2:-}"; PROMPT_MODE=1; shift 2 ;;
     --name)   TASK_NAME="${2:-}"; shift 2 ;;
     --cwd)    TASK_CWD="${2:-}"; shift 2 ;;
+    --notify) NOTIFY="${2:-}"; shift 2 ;;
     --) shift; break ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *)  break ;;
@@ -225,15 +227,32 @@ for (prompt, cwd) in tasks:
     with open(settings_file, 'w') as f:
         json.dump(settings, f, indent=2)
 
-    # Write on-stop.sh -- marks task done and sends macOS notification
-    # Escape single quotes in first_line for shell safety
-    safe_first_line = first_line.replace("'", "'\\''")
+    # Write on-stop.sh -- marks task done, then runs optional notify action
+    notify = os.environ.get('TQ_NOTIFY', '')
     stop_script = '#!/usr/bin/env bash\n'
+    stop_script += 'set -euo pipefail\n'
     stop_script += '# Mark tq task done\n'
     stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
     stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
     stop_script += "  sed -i '' 's/^status=running/status=done/' \"$STATE_FILE\"\n"
     stop_script += 'fi\n'
+    if notify:
+        stop_script += '\n# Notification (--notify)\n'
+        stop_script += 'export TQ_PROMPT=' + json.dumps(first_line) + '\n'
+        stop_script += 'export TQ_HASH=' + json.dumps(h) + '\n'
+        stop_script += 'export TQ_STATE_FILE=' + json.dumps(state_file) + '\n'
+        if notify == 'macos':
+            stop_script += 'osascript <<\'APPLES\'\n'
+            stop_script += 'display notification ' + json.dumps(first_line) + ' with title "tq: task done"\n'
+            stop_script += 'APPLES\n'
+        elif notify == 'bell':
+            stop_script += "printf '\\a'\n"
+        elif '/' in notify or notify.endswith('.sh'):
+            # path/to/script -- called with TQ_PROMPT, TQ_HASH, TQ_STATE_FILE in env
+            stop_script += json.dumps(notify) + '\n'
+        else:
+            # inline shell snippet -- TQ_PROMPT, TQ_HASH, TQ_STATE_FILE available
+            stop_script += notify + '\n'
     with open(stop_hook, 'w') as f:
         f.write(stop_script)
     os.chmod(stop_hook, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
@@ -288,6 +307,8 @@ for (prompt, cwd) in tasks:
     print(json.dumps({'hash': h, 'first_line': first_line}))
 
 PYEOF
+
+export TQ_NOTIFY="$NOTIFY"
 
 if [[ "$PROMPT_MODE" == "1" ]]; then
   TASK_CWD="${TASK_CWD:-$PWD}"
