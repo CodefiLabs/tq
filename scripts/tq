@@ -5,26 +5,49 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 STATUS_MODE=0
-if [[ "${1:-}" == "--status" ]]; then
-  STATUS_MODE=1
-  shift
-fi
+PROMPT_MODE=0
+PROMPT_TEXT=""
+TASK_NAME="adhoc"
+TASK_CWD=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1:-}" in
+    --status) STATUS_MODE=1; shift ;;
+    --prompt) PROMPT_TEXT="${2:-}"; PROMPT_MODE=1; shift 2 ;;
+    --name)   TASK_NAME="${2:-}"; shift 2 ;;
+    --cwd)    TASK_CWD="${2:-}"; shift 2 ;;
+    --) shift; break ;;
+    -*) echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)  break ;;
+  esac
+done
 
 QUEUE_FILE="${1:-}"
-if [[ -z "$QUEUE_FILE" ]]; then
+
+if [[ "$PROMPT_MODE" == "1" && -n "$QUEUE_FILE" ]]; then
+  echo "Error: --prompt and a queue file are mutually exclusive" >&2
+  exit 1
+fi
+
+if [[ "$PROMPT_MODE" == "0" && -z "$QUEUE_FILE" ]]; then
   echo "Usage: tq [--status] <queue-yaml-file>" >&2
+  echo "       tq [--status] --prompt <text> [--name <name>] [--cwd <dir>]" >&2
   exit 1
 fi
 
-QUEUE_FILE="$(realpath "$QUEUE_FILE")"
-if [[ ! -f "$QUEUE_FILE" ]]; then
-  echo "Error: queue file not found: $QUEUE_FILE" >&2
-  exit 1
+if [[ "$PROMPT_MODE" == "1" ]]; then
+  STATE_DIR="${HOME}/.tq/adhoc/${TASK_NAME}"
+else
+  QUEUE_FILE="$(realpath "$QUEUE_FILE")"
+  if [[ ! -f "$QUEUE_FILE" ]]; then
+    echo "Error: queue file not found: $QUEUE_FILE" >&2
+    exit 1
+  fi
+  QUEUE_DIR="$(dirname "$QUEUE_FILE")"
+  QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
+  STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
 fi
 
-QUEUE_DIR="$(dirname "$QUEUE_FILE")"
-QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
-STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
 mkdir -p "$STATE_DIR"
 
 # ---------------------------------------------------------------------------
@@ -32,7 +55,11 @@ mkdir -p "$STATE_DIR"
 # ---------------------------------------------------------------------------
 if [[ "$STATUS_MODE" == "1" ]]; then
   if [[ ! -d "$STATE_DIR" ]]; then
-    echo "No state found for $QUEUE_FILE (run tq first)"
+    if [[ "$PROMPT_MODE" == "1" ]]; then
+      echo "No state found for name: $TASK_NAME (run tq --prompt first)"
+    else
+      echo "No state found for $QUEUE_FILE (run tq first)"
+    fi
     exit 0
   fi
 
@@ -83,79 +110,87 @@ trap 'rm -f "$PARSE_SCRIPT"' EXIT
 cat > "$PARSE_SCRIPT" <<'PYEOF'
 import sys, os, hashlib, re, json, stat
 
-queue_file = sys.argv[1]
-state_dir  = sys.argv[2]
 sessions_dir = os.path.expanduser('~/.tq/sessions')
 os.makedirs(sessions_dir, exist_ok=True)
 
-with open(queue_file) as f:
-    text = f.read()
+# Support direct prompt mode: --prompt <text> <state_dir> [cwd]
+if len(sys.argv) > 1 and sys.argv[1] == '--prompt':
+    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '')]
+    state_dir = sys.argv[3]
+else:
+    queue_file = sys.argv[1]
+    state_dir  = sys.argv[2]
 
-lines = text.split('\n')
+    with open(queue_file) as f:
+        text = f.read()
 
-# Extract top-level cwd
-cwd = ''
-for line in lines:
-    m = re.match(r'^cwd:\s*(.+)$', line)
-    if m:
-        cwd = m.group(1).strip().strip('"\'')
-        break
+    lines = text.split('\n')
 
-# Parse tasks -- handle inline, block literal (|), block folded (>), quoted
-i = 0
-while i < len(lines):
-    m = re.match(r'^  - prompt:\s*(.*)', lines[i])
-    if not m:
-        i += 1
-        continue
+    # Extract top-level cwd
+    cwd = ''
+    for line in lines:
+        m = re.match(r'^cwd:\s*(.+)$', line)
+        if m:
+            cwd = m.group(1).strip().strip('"\'')
+            break
 
-    inline = m.group(1).strip()
+    # Parse tasks -- handle inline, block literal (|), block folded (>), quoted
+    tasks = []
+    i = 0
+    while i < len(lines):
+        m = re.match(r'^  - prompt:\s*(.*)', lines[i])
+        if not m:
+            i += 1
+            continue
 
-    if inline in ('|', '>'):
-        # Block scalar: collect indented continuation lines
-        block_lines = []
-        j = i + 1
-        indent = None
-        while j < len(lines):
-            line = lines[j]
-            stripped = line.lstrip()
-            if not stripped:
-                if indent is not None:
-                    block_lines.append('')
+        inline = m.group(1).strip()
+
+        if inline in ('|', '>'):
+            # Block scalar: collect indented continuation lines
+            block_lines = []
+            j = i + 1
+            indent = None
+            while j < len(lines):
+                line = lines[j]
+                stripped = line.lstrip()
+                if not stripped:
+                    if indent is not None:
+                        block_lines.append('')
+                    j += 1
+                    continue
+                cur_indent = len(line) - len(stripped)
+                if indent is None:
+                    indent = cur_indent
+                if cur_indent < indent:
+                    break
+                block_lines.append(line[indent:])
                 j += 1
-                continue
-            cur_indent = len(line) - len(stripped)
-            if indent is None:
-                indent = cur_indent
-            if cur_indent < indent:
-                break
-            block_lines.append(line[indent:])
-            j += 1
-        # Remove trailing blank lines
-        while block_lines and not block_lines[-1]:
-            block_lines.pop()
-        if inline == '>':
-            out = []
-            for bl in block_lines:
-                out.append('\n' if bl == '' else bl)
-            prompt = ' '.join(out).strip()
+            # Remove trailing blank lines
+            while block_lines and not block_lines[-1]:
+                block_lines.pop()
+            if inline == '>':
+                out = []
+                for bl in block_lines:
+                    out.append('\n' if bl == '' else bl)
+                prompt = ' '.join(out).strip()
+            else:
+                prompt = '\n'.join(block_lines)
+            i = j
         else:
-            prompt = '\n'.join(block_lines)
-        i = j
-    else:
-        # Inline prompt -- strip surrounding quotes if present
-        prompt = inline
-        if len(prompt) >= 2 and (
-            (prompt[0] == '"' and prompt[-1] == '"') or
-            (prompt[0] == "'" and prompt[-1] == "'")
-        ):
-            prompt = prompt[1:-1]
-        i += 1
+            # Inline prompt -- strip surrounding quotes if present
+            prompt = inline
+            if len(prompt) >= 2 and (
+                (prompt[0] == '"' and prompt[-1] == '"') or
+                (prompt[0] == "'" and prompt[-1] == "'")
+            ):
+                prompt = prompt[1:-1]
+            i += 1
 
-    prompt = prompt.strip()
-    if not prompt:
-        continue
+        prompt = prompt.strip()
+        if prompt:
+            tasks.append((prompt, cwd))
 
+for (prompt, cwd) in tasks:
     h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
     first_line = prompt.split('\n')[0][:80]
 
@@ -254,10 +289,19 @@ while i < len(lines):
 
 PYEOF
 
-PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "$QUEUE_FILE" "$STATE_DIR")
+if [[ "$PROMPT_MODE" == "1" ]]; then
+  TASK_CWD="${TASK_CWD:-$PWD}"
+  PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "--prompt" "$PROMPT_TEXT" "$STATE_DIR" "$TASK_CWD")
+else
+  PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "$QUEUE_FILE" "$STATE_DIR")
+fi
 
 if [[ -z "$PARSE_OUTPUT" ]]; then
-  echo "No tasks found in $QUEUE_FILE" >&2
+  if [[ "$PROMPT_MODE" == "1" ]]; then
+    echo "Error: empty prompt" >&2
+  else
+    echo "No tasks found in $QUEUE_FILE" >&2
+  fi
   exit 0
 fi
 
