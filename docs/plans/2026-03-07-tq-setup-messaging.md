@@ -44,7 +44,7 @@ Config written to ~/.tq/message.yaml
 Workspace: ~/.tq/workspace/ (created)
 
 To receive Telegram messages as tq tasks, add to crontab (crontab -e):
-  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1
+  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
 
 Run  tq-setup  again at any time to reconfigure.
 ```
@@ -175,14 +175,14 @@ EOF
 
 # --- Create workspace ---
 mkdir -p "$HOME/.tq/workspace"
-mkdir -p "$HOME/.claude/logs"
+mkdir -p "$HOME/.tq/logs"
 
 echo ""
 echo "Config written to $CONFIG_FILE"
 echo "Workspace: $HOME/.tq/workspace/ (created)"
 echo ""
 echo "To receive Telegram messages as tq tasks, add to crontab (crontab -e):"
-echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1"
+echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1"
 echo ""
 echo "Run  tq-setup  again at any time to reconfigure."
 ```
@@ -561,7 +561,7 @@ If it fails, report the error and stop.
 If it succeeds, write the config:
 
 ```bash
-mkdir -p ~/.tq ~/.tq/workspace ~/.claude/logs
+mkdir -p ~/.tq ~/.tq/workspace ~/.tq/logs
 cat > ~/.tq/message.yaml <<EOF
 default_service: telegram
 content: <CONTENT_TYPE>
@@ -580,7 +580,7 @@ Tell the user:
 >
 > To receive your Telegram messages as tq tasks, add this to your crontab (`crontab -e`):
 > ```
-> * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1
+> * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
 > ```
 >
 > tq will now notify you via Telegram when tasks complete.
@@ -631,7 +631,7 @@ echo ""
 echo "Or from Claude Code: /setup-telegram"
 echo ""
 echo "To relay Telegram messages as tq tasks, add to crontab:"
-echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1"
+echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1"
 ```
 
 **Step 1: Read `scripts/tq-install.sh`, locate both insertion points, then edit.**

@@ -46,7 +46,7 @@ Flag any running-state tasks whose session is dead (these should have been caugh
 
 ### 5. Log check
 ```bash
-tail -50 ~/.claude/logs/tq.log 2>/dev/null || echo "(no log file)"
+tail -50 ~/.tq/logs/tq.log 2>/dev/null || echo "(no log file)"
 ```
 Scan for lines containing `error`, `Error`, `failed`, or `Exit code` and surface them.
 Warn if log file doesn't exist and cron jobs are configured (logging may be broken).

@@ -48,8 +48,8 @@ tq ~/.claude/queues/morning.yaml
 tq --status ~/.claude/queues/morning.yaml
 
 # Schedule via cron (crontab -e)
-0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 
 # Reset one task (delete state file — tq will re-run it)
 rm ~/.claude/queues/.tq/morning/a1b2c3d4

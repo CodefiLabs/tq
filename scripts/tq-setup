@@ -112,7 +112,7 @@ EOF
 
 # --- Create workspace ---
 mkdir -p "$HOME/.tq/workspace"
-mkdir -p "$HOME/.claude/logs"
+mkdir -p "$HOME/.tq/logs"
 
 echo ""
 echo "Config written to $CONFIG_FILE"
@@ -121,8 +121,8 @@ echo "Workspace: $HOME/.tq/workspace/ (created)"
 # --- Install crons ---
 POLL_BIN="$(command -v tq-telegram-poll 2>/dev/null || echo "/opt/homebrew/bin/tq-telegram-poll")"
 WATCHDOG_BIN="$(command -v tq-telegram-watchdog 2>/dev/null || echo "/opt/homebrew/bin/tq-telegram-watchdog")"
-POLL_CRON="* * * * * ${POLL_BIN} >> $HOME/.claude/logs/tq-telegram.log 2>&1"
-WATCHDOG_CRON="*/5 * * * * ${WATCHDOG_BIN} >> $HOME/.claude/logs/tq-telegram.log 2>&1"
+POLL_CRON="* * * * * ${POLL_BIN} >> $HOME/.tq/logs/tq-telegram.log 2>&1"
+WATCHDOG_CRON="*/5 * * * * ${WATCHDOG_BIN} >> $HOME/.tq/logs/tq-telegram.log 2>&1"
 
 CRONTAB_CURRENT="$(crontab -l 2>/dev/null || true)"
 

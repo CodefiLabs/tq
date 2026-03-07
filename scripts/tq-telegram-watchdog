@@ -18,6 +18,6 @@ fi
 
 if ! crontab -l 2>/dev/null | grep -qF "tq-telegram-poll"; then
   echo "[tq-telegram-watchdog] poll cron missing — restoring"
-  mkdir -p "$HOME/.claude/logs"
-  (crontab -l 2>/dev/null; echo "* * * * * ${POLL_BIN} >> $HOME/.claude/logs/tq-telegram.log 2>&1") | crontab -
+  mkdir -p "$HOME/.tq/logs"
+  (crontab -l 2>/dev/null; echo "* * * * * ${POLL_BIN} >> $HOME/.tq/logs/tq-telegram.log 2>&1") | crontab -
 fi

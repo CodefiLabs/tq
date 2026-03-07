@@ -30,7 +30,7 @@ Arguments: $ARGUMENTS
 
 3. **Ensure log dir exists**:
    ```bash
-   mkdir -p ~/.claude/logs
+   mkdir -p ~/.tq/logs
    ```
 
 4. **Read current crontab**:
@@ -40,8 +40,8 @@ Arguments: $ARGUMENTS
 
 5. **Build the two cron lines** for this queue:
    ```
-   <cron-expression> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
-   */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
+   <cron-expression> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+   */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
    ```
 
 6. **Merge into crontab**:

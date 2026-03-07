@@ -61,13 +61,13 @@ for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog; do
   echo "  linked $DEST -> $SRC"
 done
 
-mkdir -p ~/.claude/queues ~/.claude/logs
+mkdir -p ~/.claude/queues ~/.tq/logs
 
 echo ""
 echo "tq installed. Crontab example (crontab -e):"
 echo ""
-echo "  0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1"
-echo "  */30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1"
+echo "  0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1"
+echo "  */30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1"
 echo ""
 echo "To configure Telegram notifications:"
 echo "  tq-setup"
@@ -75,4 +75,4 @@ echo ""
 echo "Or from Claude Code: /setup-telegram"
 echo ""
 echo "To relay Telegram messages as tq tasks, add to crontab:"
-echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1"
+echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1"

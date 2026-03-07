@@ -73,7 +73,7 @@ tq --status <queue.yaml>
 - Standalone; no runtime dependency on `tq`
 - Resolves plugin root via `CLAUDE_PLUGIN_ROOT` env var or `dirname` of the script
 - Symlinks `scripts/tq` into `/opt/homebrew/bin` (or `$TQ_INSTALL_DIR`)
-- Creates `~/.claude/queues/` and `~/.claude/logs/`
+- Creates `~/.claude/queues/` and `~/.tq/logs/`
 - Prints example crontab lines on success
 
 ### `skills/tq/SKILL.md` — Claude Plugin Skill

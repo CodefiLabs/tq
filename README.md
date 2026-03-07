@@ -37,7 +37,7 @@ Here's exactly what that command does:
 
 4. **Symlinks `tq`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so the command is available in your shell and in cron jobs.
 
-5. **Creates `~/.claude/queues/` and `~/.claude/logs/`** — the default directories for queue files and log output.
+5. **Creates `~/.claude/queues/` and `~/.tq/logs/`** — the default directories for queue files and log output.
 
 If `claude` is not on your PATH, steps 2–3 are skipped with a warning and only the CLI tools are installed.
 
@@ -232,12 +232,12 @@ crontab -e
 
 ```cron
 # Run morning queue at 9am daily
-0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 
 # Sweep dead sessions every 30 minutes (keeps status accurate)
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
-Logs accumulate in `~/.claude/logs/tq.log`.
+Logs accumulate in `~/.tq/logs/tq.log`.
 
 See `skills/tq/references/cron-expressions.md` for a natural language → cron expression reference.

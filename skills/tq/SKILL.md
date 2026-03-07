@@ -70,8 +70,8 @@ tq --status <queue.yaml>  # print status table; flip dead sessions to done
 ## Crontab Pattern
 
 ```cron
-0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
 The `tq --status` cron runs every 30 min to reap dead sessions and flip their state to `done`.

@@ -65,7 +65,7 @@ If it fails, report the error and stop.
 If it succeeds, write the config:
 
 ```bash
-mkdir -p ~/.tq ~/.tq/workspace ~/.claude/logs
+mkdir -p ~/.tq ~/.tq/workspace ~/.tq/logs
 cat > ~/.tq/message.yaml <<EOF
 default_service: telegram
 content: <CONTENT_TYPE>
@@ -84,7 +84,7 @@ Tell the user:
 >
 > To receive your Telegram messages as tq tasks, add this to your crontab (`crontab -e`):
 > ```
-> * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.claude/logs/tq-telegram.log 2>&1
+> * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
 > ```
 >
 > tq will now notify you via Telegram when tasks complete.

@@ -42,11 +42,11 @@
 - **Pattern**:
   ```cron
   # Run queue at 9am daily
-  0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+  0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
   # Sweep dead sessions every 30 min
-  */30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+  */30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
   ```
-- **Log**: Output is appended to `~/.claude/logs/tq.log` (created by `tq-install.sh`)
+- **Log**: Output is appended to `~/.tq/logs/tq.log` (created by `tq-install.sh`)
 - **Note**: Cron has a minimal PATH — `tq` exports `/opt/homebrew/bin:/usr/local/bin` at startup to ensure tmux, python3, and claude are found
 
 ## Claude Stop Hook
