@@ -253,6 +253,17 @@ for (prompt, cwd) in tasks:
         else:
             # inline shell snippet -- TQ_PROMPT, TQ_HASH, TQ_STATE_FILE available
             stop_script += notify + '\n'
+    # Messaging via tq-message (always emitted; tq-message exits silently if unconfigured)
+    stop_script += '\n# tq-message notification\n'
+    stop_script += 'export TQ_HASH=' + json.dumps(h) + '\n'
+    if len(sys.argv) > 1 and sys.argv[1] != '--prompt':
+        stop_script += 'export TQ_QUEUE_FILE=' + json.dumps(queue_file) + '\n'
+    else:
+        stop_script += 'export TQ_QUEUE_FILE=""\n'
+    stop_script += 'if command -v tq-message &>/dev/null; then\n'
+    stop_script += '  SESSION="$(grep \'^session=\' "$STATE_FILE" | cut -d= -f2)"\n'
+    stop_script += '  tq-message --task "$TQ_HASH" --queue "$TQ_QUEUE_FILE" --session "$SESSION"\n'
+    stop_script += 'fi\n'
     with open(stop_hook, 'w') as f:
         f.write(stop_script)
     os.chmod(stop_hook, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
