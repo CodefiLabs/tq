@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+CONFIG_FILE="$HOME/.tq/message.yaml"
+
+# Exit silently if not configured
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  exit 0
+fi
+
+POLL_BIN="$(command -v tq-telegram-poll 2>/dev/null || true)"
+if [[ -z "$POLL_BIN" ]]; then
+  echo "[tq-telegram-watchdog] tq-telegram-poll not found in PATH" >&2
+  exit 0
+fi
+
+if ! crontab -l 2>/dev/null | grep -qF "tq-telegram-poll"; then
+  echo "[tq-telegram-watchdog] poll cron missing — restoring"
+  mkdir -p "$HOME/.claude/logs"
+  (crontab -l 2>/dev/null; echo "* * * * * ${POLL_BIN} >> $HOME/.claude/logs/tq-telegram.log 2>&1") | crontab -
+fi

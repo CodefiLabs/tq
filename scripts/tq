@@ -341,7 +341,8 @@ PYEOF
 export TQ_NOTIFY="$NOTIFY"
 
 if [[ "$PROMPT_MODE" == "1" ]]; then
-  TASK_CWD="${TASK_CWD:-$PWD}"
+  TASK_CWD="${TASK_CWD:-$HOME/.tq/workspace}"
+  mkdir -p "$TASK_CWD"
   PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "--prompt" "$PROMPT_TEXT" "$STATE_DIR" "$TASK_CWD")
 else
   PARSE_OUTPUT=$(python3 "$PARSE_SCRIPT" "$QUEUE_FILE" "$STATE_DIR")
