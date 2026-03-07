@@ -34,4 +34,91 @@ if [[ -n "$QUEUE_FILE" ]]; then
   fi
 fi
 
-echo "[tq-message] task=$TASK_HASH queue=$QUEUE_FILE message=${MESSAGE_TEXT:0:40}"
+CONFIG_SCRIPT=$(mktemp /tmp/tq-message-config-XXXXXX.py)
+trap 'rm -f "$CONFIG_SCRIPT"' EXIT
+
+cat > "$CONFIG_SCRIPT" <<'PYEOF'
+import sys, os, re, json
+
+def parse_flat_block(text, top_key):
+    """Extract key: value pairs from an indented block under top_key."""
+    lines = text.split('\n')
+    in_block = False
+    block_indent = None
+    result = {}
+    for line in lines:
+        m = re.match(r'^' + re.escape(top_key) + r':\s*$', line)
+        if m:
+            in_block = True
+            block_indent = None
+            continue
+        if in_block:
+            if not line.strip():
+                continue
+            cur = len(line) - len(line.lstrip())
+            if block_indent is None:
+                block_indent = cur
+            if cur < block_indent:
+                break
+            kv = re.match(r'^\s+(\w+):\s*(.+)$', line)
+            if kv:
+                result[kv.group(1)] = kv.group(2).strip().strip('"\'')
+    return result
+
+def parse_top_key(text, key):
+    """Extract a single top-level key: value."""
+    m = re.search(r'^' + re.escape(key) + r':\s*(.+)$', text, re.MULTILINE)
+    return m.group(1).strip().strip('"\'') if m else ''
+
+# --- 1. Global config: ~/.tq/message.yaml ---
+config = {}
+global_path = os.path.expanduser('~/.tq/message.yaml')
+if os.path.exists(global_path):
+    with open(global_path) as f:
+        g = f.read()
+    config['service'] = parse_top_key(g, 'default_service')
+    config['content'] = parse_top_key(g, 'content')
+    tg = parse_flat_block(g, 'telegram')
+    if tg.get('bot_token'): config['telegram_bot_token'] = tg['bot_token']
+    if tg.get('chat_id'):   config['telegram_chat_id']   = tg['chat_id']
+    sl = parse_flat_block(g, 'slack')
+    if sl.get('webhook'):   config['slack_webhook'] = sl['webhook']
+
+# --- 2. Queue YAML message: block ---
+queue_file = sys.argv[1] if len(sys.argv) > 1 else ''
+if queue_file and os.path.exists(queue_file):
+    with open(queue_file) as f:
+        q = f.read()
+    msg = parse_flat_block(q, 'message')
+    if msg.get('service'):  config['service']              = msg['service']
+    if msg.get('content'):  config['content']              = msg['content']
+    if msg.get('chat_id'):  config['telegram_chat_id']     = msg['chat_id']
+    if msg.get('webhook'):  config['slack_webhook']        = msg['webhook']
+
+# --- 3. Env var overrides ---
+if os.environ.get('TQ_MESSAGE_SERVICE'): config['service'] = os.environ['TQ_MESSAGE_SERVICE']
+if os.environ.get('TQ_MESSAGE_CONTENT'): config['content'] = os.environ['TQ_MESSAGE_CONTENT']
+if os.environ.get('TQ_TELEGRAM_BOT_TOKEN'): config['telegram_bot_token'] = os.environ['TQ_TELEGRAM_BOT_TOKEN']
+if os.environ.get('TQ_TELEGRAM_CHAT_ID'):   config['telegram_chat_id']   = os.environ['TQ_TELEGRAM_CHAT_ID']
+if os.environ.get('TQ_SLACK_WEBHOOK'):      config['slack_webhook']       = os.environ['TQ_SLACK_WEBHOOK']
+
+# Defaults
+if not config.get('service'): config['service'] = 'telegram'
+if not config.get('content'): config['content'] = 'summary'
+
+print(json.dumps(config))
+PYEOF
+
+CONFIG_JSON="$(python3 "$CONFIG_SCRIPT" "${QUEUE_FILE:-}")"
+
+SERVICE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('service',''))" "$CONFIG_JSON")"
+CONTENT="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('content',''))" "$CONFIG_JSON")"
+TG_TOKEN="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('telegram_bot_token',''))" "$CONFIG_JSON")"
+TG_CHAT="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('telegram_chat_id',''))" "$CONFIG_JSON")"
+
+if [[ -z "$SERVICE" ]] || { [[ "$SERVICE" == "telegram" ]] && [[ -z "$TG_TOKEN" || -z "$TG_CHAT" ]]; }; then
+  # No messaging configured — exit silently
+  exit 0
+fi
+
+echo "[tq-message] service=$SERVICE content=$CONTENT task=$TASK_HASH"
