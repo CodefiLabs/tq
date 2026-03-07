@@ -4,7 +4,7 @@
 
 **Goal:** Add `tq-message` — a CLI + Claude slash command that sends per-task and queue-level notifications to Telegram (and future services) with AI-generated summaries via the live Claude session.
 
-**Architecture:** `scripts/tq-message` is a standalone Bash script (same style as `tq`) that resolves three-layer config (global `~/.tq/message.yaml` → queue YAML `message:` block → env vars) and delivers messages via `curl`. For AI summaries, `tq-message` uses `tmux send-keys` to ask the still-live Claude session to run the `/tq-message` slash command, which generates the summary and calls back `tq-message --message "..."`. Non-summary content types (status/details/log) are formatted and sent directly. `scripts/tq` is updated to call `tq-message` from `on-stop.sh` and to detect queue completion in `--status` mode.
+**Architecture:** `scripts/tq-message` is a standalone Bash script (same style as `tq`) that resolves three-layer config (global `~/.tq/config/message.yaml` → queue YAML `message:` block → env vars) and delivers messages via `curl`. For AI summaries, `tq-message` uses `tmux send-keys` to ask the still-live Claude session to run the `/tq-message` slash command, which generates the summary and calls back `tq-message --message "..."`. Non-summary content types (status/details/log) are formatted and sent directly. `scripts/tq` is updated to call `tq-message` from `on-stop.sh` and to detect queue completion in `--status` mode.
 
 **Tech Stack:** Bash + embedded Python 3 stdlib (same as tq), curl (Telegram Bot API), tmux send-keys, Claude plugin slash command
 
@@ -91,9 +91,9 @@ git commit -m "add tq-message scaffold with arg parsing"
 **Files:**
 - Modify: `scripts/tq-message`
 
-**What to build:** Embedded Python that reads `~/.tq/message.yaml` (global config), parses the `message:` block from the queue YAML, then applies env var overrides. Outputs resolved config as JSON.
+**What to build:** Embedded Python that reads `~/.tq/config/message.yaml` (global config), parses the `message:` block from the queue YAML, then applies env var overrides. Outputs resolved config as JSON.
 
-**Config priority (lowest → highest):** `~/.tq/message.yaml` → queue YAML `message:` block → env vars
+**Config priority (lowest → highest):** `~/.tq/config/message.yaml` → queue YAML `message:` block → env vars
 
 **Step 1: Add the Python config resolver after the arg parsing in `scripts/tq-message`**
 
@@ -136,9 +136,9 @@ def parse_top_key(text, key):
     m = re.search(r'^' + re.escape(key) + r':\s*(.+)$', text, re.MULTILINE)
     return m.group(1).strip().strip('"\'') if m else ''
 
-# --- 1. Global config: ~/.tq/message.yaml ---
+# --- 1. Global config: ~/.tq/config/message.yaml ---
 config = {}
-global_path = os.path.expanduser('~/.tq/message.yaml')
+global_path = os.path.expanduser('~/.tq/config/message.yaml')
 if os.path.exists(global_path):
     with open(global_path) as f:
         g = f.read()
@@ -194,14 +194,14 @@ echo "[tq-message] service=$SERVICE content=$CONTENT task=$TASK_HASH"
 
 ```bash
 bash scripts/tq-message --task abc123 --queue ~/.tq/queues/morning.yaml
-# Expected: silent exit (no ~/.tq/message.yaml)
+# Expected: silent exit (no ~/.tq/config/message.yaml)
 ```
 
 **Step 3: Smoke test — with config file**
 
 ```bash
 mkdir -p ~/.tq
-cat > ~/.tq/message.yaml <<'EOF'
+cat > ~/.tq/config/message.yaml <<'EOF'
 default_service: telegram
 content: status
 
@@ -444,7 +444,7 @@ fi
 
 **Step 3: Manual test — Telegram delivery (requires real bot token)**
 
-Set up `~/.tq/message.yaml` with a real Telegram bot token and chat ID. Run:
+Set up `~/.tq/config/message.yaml` with a real Telegram bot token and chat ID. Run:
 
 ```bash
 bash scripts/tq-message --task abc12345 --queue /tmp/tq-test/test.yaml
@@ -699,7 +699,7 @@ After the `## Task Object Keys` section, add:
 ## Queue-Level Messaging
 
 Add an optional `message:` block at the top level to configure notifications for this queue.
-Overrides `~/.tq/message.yaml` global config.
+Overrides `~/.tq/config/message.yaml` global config.
 
 ```yaml
 message:
@@ -714,7 +714,7 @@ message:
 - `details` — prompt first line, status, duration, hash (no Claude required)
 - `log` — last 200 lines of tmux pane scrollback (no Claude required)
 
-**Global credentials** go in `~/.tq/message.yaml` — never in queue files (queue files may be shared).
+**Global credentials** go in `~/.tq/config/message.yaml` — never in queue files (queue files may be shared).
 ```
 
 **Step 3: Reinstall to verify**
@@ -742,7 +742,7 @@ git commit -m "install tq-message via tq-install.sh, document message: block in 
 
 **Setup:**
 
-1. Ensure `~/.tq/message.yaml` has valid Telegram credentials
+1. Ensure `~/.tq/config/message.yaml` has valid Telegram credentials
 2. Ensure `tq-message` is installed: `which tq-message`
 3. Create a test queue:
 

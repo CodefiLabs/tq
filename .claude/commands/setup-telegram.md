@@ -1,6 +1,6 @@
 ---
 name: setup-telegram
-description: Configure Telegram notifications for tq. Guides you through bot token setup and writes ~/.tq/message.yaml.
+description: Configure Telegram notifications for tq. Guides you through bot token setup and writes ~/.tq/config/message.yaml.
 tags: tq, setup, telegram, notify
 allowed-tools: Bash(curl),Bash(mkdir),Bash(cat),Bash(python3),Bash(tq-setup)
 ---
@@ -66,7 +66,7 @@ If it succeeds, write the config:
 
 ```bash
 mkdir -p ~/.tq ~/.tq/workspace ~/.tq/logs
-cat > ~/.tq/message.yaml <<EOF
+cat > ~/.tq/config/message.yaml <<EOF
 default_service: telegram
 content: <CONTENT_TYPE>
 
@@ -80,7 +80,7 @@ EOF
 
 Tell the user:
 
-> Config written to ~/.tq/message.yaml.
+> Config written to ~/.tq/config/message.yaml.
 >
 > To receive your Telegram messages as tq tasks, add this to your crontab (`crontab -e`):
 > ```

@@ -5,7 +5,7 @@
 **Goal:** Add interactive Telegram setup (`tq-setup`), a Telegram polling daemon (`tq-telegram-poll`) that turns incoming bot messages into `tq --prompt` sessions, default `--prompt` cwd to `~/.tq/workspace/`, and a `/setup-telegram` Claude slash command.
 
 **Architecture:**
-- `tq-setup` — interactive script: prompts for bot token, auto-discovers user_id via `getUpdates`, writes `~/.tq/message.yaml`
+- `tq-setup` — interactive script: prompts for bot token, auto-discovers user_id via `getUpdates`, writes `~/.tq/config/message.yaml`
 - `tq-telegram-poll` — cron script: polls `getUpdates`, filters by user_id, runs `tq --prompt` for each new message
 - `scripts/tq` — change `--prompt` cwd default from `$PWD` to `~/.tq/workspace/`
 - `scripts/tq-message` — read `user_id` from config as alias for `chat_id` (both work)
@@ -40,7 +40,7 @@ Content [status]: [input]
 Sending test message...
 Test message sent. Check your Telegram.
 
-Config written to ~/.tq/message.yaml
+Config written to ~/.tq/config/message.yaml
 Workspace: ~/.tq/workspace/ (created)
 
 To receive Telegram messages as tq tasks, add to crontab (crontab -e):
@@ -49,7 +49,7 @@ To receive Telegram messages as tq tasks, add to crontab (crontab -e):
 Run  tq-setup  again at any time to reconfigure.
 ```
 
-**Overwrite guard:** if `~/.tq/message.yaml` already exists, prompt `Overwrite? [y/N]:` and exit 0 on anything but `y`.
+**Overwrite guard:** if `~/.tq/config/message.yaml` already exists, prompt `Overwrite? [y/N]:` and exit 0 on anything but `y`.
 
 **Auto-discovery flow:**
 1. Print "Send any message to your bot now, then press Enter..."
@@ -66,7 +66,7 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-CONFIG_FILE="$HOME/.tq/message.yaml"
+CONFIG_FILE="$HOME/.tq/config/message.yaml"
 
 # --- Overwrite guard ---
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -209,7 +209,7 @@ git commit -m "add tq-setup interactive Telegram setup with user_id auto-discove
 - Create: `scripts/tq-telegram-poll`
 
 **What it does:**
-1. Reads `bot_token` and `user_id` from `~/.tq/message.yaml`; exits silently if not configured
+1. Reads `bot_token` and `user_id` from `~/.tq/config/message.yaml`; exits silently if not configured
 2. Reads last offset from `~/.tq/telegram-poll-offset` (0 if file doesn't exist)
 3. Calls `getUpdates?offset=<offset>&limit=10&timeout=0`
 4. Filters messages where `from.id == user_id`
@@ -225,7 +225,7 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-CONFIG_FILE="$HOME/.tq/message.yaml"
+CONFIG_FILE="$HOME/.tq/config/message.yaml"
 OFFSET_FILE="$HOME/.tq/telegram-poll-offset"
 
 # --- Read config ---
@@ -496,7 +496,7 @@ The file content:
 ```markdown
 ---
 name: setup-telegram
-description: Configure Telegram notifications for tq. Guides you through bot token setup and writes ~/.tq/message.yaml.
+description: Configure Telegram notifications for tq. Guides you through bot token setup and writes ~/.tq/config/message.yaml.
 tags: tq, setup, telegram, notify
 allowed-tools: Bash(curl),Bash(mkdir),Bash(cat),Bash(python3),Bash(tq-setup)
 ---
@@ -562,7 +562,7 @@ If it succeeds, write the config:
 
 ```bash
 mkdir -p ~/.tq ~/.tq/workspace ~/.tq/logs
-cat > ~/.tq/message.yaml <<EOF
+cat > ~/.tq/config/message.yaml <<EOF
 default_service: telegram
 content: <CONTENT_TYPE>
 
@@ -576,7 +576,7 @@ EOF
 
 Tell the user:
 
-> Config written to ~/.tq/message.yaml.
+> Config written to ~/.tq/config/message.yaml.
 >
 > To receive your Telegram messages as tq tasks, add this to your crontab (`crontab -e`):
 > ```

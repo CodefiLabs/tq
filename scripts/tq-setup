@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-CONFIG_FILE="$HOME/.tq/message.yaml"
+CONFIG_FILE="$HOME/.tq/config/message.yaml"
 
 # --- Overwrite guard ---
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -100,7 +100,7 @@ else
 fi
 
 # --- Write config ---
-mkdir -p "$HOME/.tq"
+mkdir -p "$HOME/.tq/config"
 cat > "$CONFIG_FILE" <<EOF
 default_service: telegram
 content: ${CONTENT_TYPE}

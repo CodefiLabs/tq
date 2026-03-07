@@ -41,7 +41,7 @@ A Claude slash command (part of the tq plugin) that runs inside the live Claude 
 **Invoked by:** `tmux send-keys -t "$SESSION" "/tq-message" Enter`
 **What it does:** Instructs Claude to write a 2-3 sentence summary of what it just accomplished, then call `tq-message` via the Bash tool with `--message "$SUMMARY"` and the queue file path from the environment.
 
-### 3. Config File: `~/.tq/message.yaml`
+### 3. Config File: `~/.tq/config/message.yaml`
 
 Global credentials and defaults. Created manually by the user.
 
@@ -83,7 +83,7 @@ TQ_MESSAGE_SERVICE=telegram    # which service
 TQ_MESSAGE_CONTENT=summary     # content type (generic, not service-specific)
 ```
 
-Priority: env vars > queue YAML > `~/.tq/message.yaml`
+Priority: env vars > queue YAML > `~/.tq/config/message.yaml`
 
 ## Trigger Points
 

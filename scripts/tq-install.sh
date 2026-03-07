@@ -61,7 +61,7 @@ for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog; do
   echo "  linked $DEST -> $SRC"
 done
 
-mkdir -p ~/.tq/queues ~/.tq/logs
+mkdir -p ~/.tq/queues ~/.tq/logs ~/.tq/config
 
 echo ""
 echo "tq installed. Crontab example (crontab -e):"

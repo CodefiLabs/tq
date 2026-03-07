@@ -15,7 +15,7 @@ Queue files are YAML files passed to `tq` as the first argument.
 ## Queue-Level Messaging
 
 Add an optional `message:` block at the top level to configure notifications for this queue.
-Overrides `~/.tq/message.yaml` global config.
+Overrides `~/.tq/config/message.yaml` global config.
 
 ```yaml
 message:
@@ -30,7 +30,7 @@ message:
 - `details` — prompt first line, status, duration, hash (no Claude required)
 - `log` — last 200 lines of tmux pane scrollback (no Claude required)
 
-**Global credentials** go in `~/.tq/message.yaml` — never in queue files (queue files may be shared).
+**Global credentials** go in `~/.tq/config/message.yaml` — never in queue files (queue files may be shared).
 
 ## Minimal Example
 

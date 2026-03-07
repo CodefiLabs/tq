@@ -25,7 +25,7 @@ Created `scripts/tq-message` as a Bash scaffold with strict mode (`set -euo pipe
 **Status**: COMPLETE
 **Commits**: 8b03067
 
-Replaced the placeholder `echo` line with an embedded Python config resolver that reads `~/.tq/message.yaml` (global config), parses a `message:` block from the queue YAML, and applies env var overrides in priority order. The resolver outputs resolved config as JSON which is unpacked into Bash variables. A guard clause exits silently when no messaging is configured.
+Replaced the placeholder `echo` line with an embedded Python config resolver that reads `~/.tq/config/message.yaml` (global config), parses a `message:` block from the queue YAML, and applies env var overrides in priority order. The resolver outputs resolved config as JSON which is unpacked into Bash variables. A guard clause exits silently when no messaging is configured.
 
 ---
 

@@ -70,9 +70,9 @@ def parse_top_key(text, key):
     m = re.search(r'^' + re.escape(key) + r':\s*(.+)$', text, re.MULTILINE)
     return m.group(1).strip().strip('"\'') if m else ''
 
-# --- 1. Global config: ~/.tq/message.yaml ---
+# --- 1. Global config: ~/.tq/config/message.yaml ---
 config = {}
-global_path = os.path.expanduser('~/.tq/message.yaml')
+global_path = os.path.expanduser('~/.tq/config/message.yaml')
 if os.path.exists(global_path):
     with open(global_path) as f:
         g = f.read()
