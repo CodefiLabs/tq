@@ -9,7 +9,7 @@ queue file until a test suite exists.
 
 ## Recommended Frameworks
 
-- **Bash scripts** (`tq`, `tq-status`, `tq-install.sh`): `bats-core` (Bash Automated Testing System)
+- **Bash scripts** (`tq`, `tq-install.sh`): `bats-core` (Bash Automated Testing System)
   - Install: `brew install bats-core`
   - Test files live in `tests/` with `.bats` extension
 - **Python YAML parser**: `pytest`
@@ -26,7 +26,7 @@ queue file until a test suite exists.
    Given `status=running` with a dead session, tq must flip to `done` and skip.
    Given no state file, tq must spawn.
 
-3. **Dead session detection** — both `tq` and `tq-status` detect stale `running` state
+3. **Dead session detection** — both `tq` (run mode) and `tq --status` detect stale `running` state
    by checking `tmux has-session`. Test with a mocked tmux that returns non-zero.
 
 4. **Hash stability** — `hashlib.sha256(prompt.encode()).hexdigest()[:8]` must be deterministic.

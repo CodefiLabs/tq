@@ -8,7 +8,7 @@ A lightweight task queue runner that spawns Claude AI tasks as independent tmux 
 
 Tasks are idempotent: running `tq queue.yaml` again skips tasks that are already `done` or have a live `running` session. Task identity is derived from a SHA-256 hash of the prompt content, so changing a prompt text treats it as a new task while re-running unchanged prompts is always a no-op.
 
-The tool is designed for macOS with cron scheduling in mind: drop a queue YAML in `~/.claude/queues/`, add a crontab line, and tasks run automatically every morning (or on whatever schedule you choose). A companion script `tq-status` reaps dead sessions and prints a status table.
+The tool is designed for macOS with cron scheduling in mind: drop a queue YAML in `~/.claude/queues/`, add a crontab line, and tasks run automatically every morning (or on whatever schedule you choose). Run `tq --status` to reap dead sessions and print a status table.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Here's exactly what that command does:
 
 3. **Installs the tq plugin** by running `claude plugin install tq@tq`. This caches the plugin files into `~/.claude/plugins/cache/tq/tq/<version>/` and registers the plugin's skills and slash commands with Claude Code. After this, Claude will recognize commands like `/todo`, `/schedule`, `/jobs`, and `/health`.
 
-4. **Symlinks `tq` and `tq-status`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so both commands are available in your shell and in cron jobs.
+4. **Symlinks `tq`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so the command is available in your shell and in cron jobs.
 
 5. **Creates `~/.claude/queues/` and `~/.claude/logs/`** — the default directories for queue files and log output.
 
@@ -80,7 +80,7 @@ Output:
 Check status:
 
 ```bash
-tq-status ~/.claude/queues/morning.yaml
+tq --status ~/.claude/queues/morning.yaml
 ```
 
 Output:
@@ -136,12 +136,12 @@ Parses the queue file and spawns a new tmux session for each pending task.
 tq ~/.claude/queues/morning.yaml
 ```
 
-### `tq-status <queue.yaml>`
+### `tq --status <queue.yaml>`
 
 Prints a formatted status table for all tasks in the queue. Also reaps any dead tmux sessions by flipping their state from `running` to `done`.
 
 ```bash
-tq-status ~/.claude/queues/morning.yaml
+tq --status ~/.claude/queues/morning.yaml
 ```
 
 Run this via cron every 30 minutes to keep state accurate even if sessions die unexpectedly.
@@ -235,7 +235,7 @@ crontab -e
 0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
 
 # Sweep dead sessions every 30 minutes (keeps status accurate)
-*/30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
 ```
 
 Logs accumulate in `~/.claude/logs/tq.log`.

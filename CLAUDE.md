@@ -16,8 +16,7 @@
 ```
 tq/
   scripts/
-    tq               @scripts/tq              # Queue runner (271 lines): parses YAML, generates launchers, spawns tmux
-    tq-status        @scripts/tq-status       # Status reporter (61 lines): prints table, reaps dead sessions
+    tq               @scripts/tq              # Queue runner + status reporter (--status flag): parses YAML, generates launchers, spawns tmux
     tq-install.sh    @scripts/tq-install.sh   # Installer (39 lines): symlinks into /opt/homebrew/bin
   skills/
     tq/
@@ -46,11 +45,11 @@ bash "$(git rev-parse --show-toplevel)/scripts/tq-install.sh"
 tq ~/.claude/queues/morning.yaml
 
 # Check status / reap dead sessions
-tq-status ~/.claude/queues/morning.yaml
+tq --status ~/.claude/queues/morning.yaml
 
 # Schedule via cron (crontab -e)
 0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
 
 # Reset one task (delete state file — tq will re-run it)
 rm ~/.claude/queues/.tq/morning/a1b2c3d4
@@ -59,7 +58,7 @@ rm ~/.claude/queues/.tq/morning/a1b2c3d4
 rm -rf ~/.claude/queues/.tq/morning/
 
 # Lint bash scripts
-shellcheck scripts/tq scripts/tq-status scripts/tq-install.sh
+shellcheck scripts/tq scripts/tq-install.sh
 ```
 
 ## Code Style & Conventions

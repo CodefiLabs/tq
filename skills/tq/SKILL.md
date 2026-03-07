@@ -11,9 +11,9 @@ version: 1.0.0
 
 # tq — Claude Task Queue Runner
 
-Scripts: `${CLAUDE_PLUGIN_ROOT}/scripts/tq`, `${CLAUDE_PLUGIN_ROOT}/scripts/tq-status`
+Script: `${CLAUDE_PLUGIN_ROOT}/scripts/tq`
 
-Installed to PATH via `/install`: `/opt/homebrew/bin/tq`, `/opt/homebrew/bin/tq-status`
+Installed to PATH via `/install`: `/opt/homebrew/bin/tq`
 
 ## Overview
 
@@ -63,18 +63,18 @@ Statuses: `pending` → `running` → `done`
 ## CLI Usage
 
 ```bash
-tq <queue.yaml>         # spawn pending tasks in tmux; skip running/done
-tq-status <queue.yaml>  # print status table; flip dead sessions to done
+tq <queue.yaml>           # spawn pending tasks in tmux; skip running/done
+tq --status <queue.yaml>  # print status table; flip dead sessions to done
 ```
 
 ## Crontab Pattern
 
 ```cron
 0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1
 ```
 
-The `tq-status` cron runs every 30 min to reap dead sessions and flip their state to `done`.
+The `tq --status` cron runs every 30 min to reap dead sessions and flip their state to `done`.
 
 ## Queue Name Inference
 

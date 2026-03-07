@@ -41,7 +41,7 @@ Arguments: $ARGUMENTS
 5. **Build the two cron lines** for this queue:
    ```
    <cron-expression> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
-   */30 * * * * /opt/homebrew/bin/tq-status ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
+   */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
    ```
 
 6. **Merge into crontab**:

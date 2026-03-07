@@ -19,14 +19,14 @@ Arguments: $ARGUMENTS
    crontab -l 2>/dev/null || echo "(no crontab)"
    ```
 
-3. **Find the tq run line** for this queue (the `tq` line, not `tq-status`).
+3. **Find the tq run line** for this queue (the `tq` run line, not `tq --status`).
    If not found, say "No active schedule found for `<name>` queue."
 
-4. **Remove only the tq run line**, keeping the `tq-status` sweep:
+4. **Remove only the tq run line**, keeping the `tq --status` sweep:
    ```bash
-   (crontab -l 2>/dev/null | grep -v "^[^#]*[^-]tq [^-].*<name>.yaml") | crontab -
+   (crontab -l 2>/dev/null | grep -v "^[^#]*tq [^-].*<name>.yaml") | crontab -
    ```
-   (The `tq-status` line is kept so state continues to be maintained.)
+   (The `tq --status` line is kept so state continues to be maintained.)
 
-5. **Confirm**: Show what was removed and note that `tq-status` is still running.
+5. **Confirm**: Show what was removed and note that `tq --status` is still running.
    Suggest `/schedule <name>` to resume.

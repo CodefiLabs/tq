@@ -4,9 +4,15 @@ set -euo pipefail
 # Ensure homebrew binaries are available (cron has minimal PATH)
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+STATUS_MODE=0
+if [[ "${1:-}" == "--status" ]]; then
+  STATUS_MODE=1
+  shift
+fi
+
 QUEUE_FILE="${1:-}"
 if [[ -z "$QUEUE_FILE" ]]; then
-  echo "Usage: tq <queue-yaml-file>" >&2
+  echo "Usage: tq [--status] <queue-yaml-file>" >&2
   exit 1
 fi
 
@@ -20,6 +26,50 @@ QUEUE_DIR="$(dirname "$QUEUE_FILE")"
 QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
 STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
 mkdir -p "$STATE_DIR"
+
+# ---------------------------------------------------------------------------
+# --status mode: print status table and reap dead sessions
+# ---------------------------------------------------------------------------
+if [[ "$STATUS_MODE" == "1" ]]; then
+  if [[ ! -d "$STATE_DIR" ]]; then
+    echo "No state found for $QUEUE_FILE (run tq first)"
+    exit 0
+  fi
+
+  printf "%-10s %-25s %-22s %s\n" "STATUS" "SESSION" "STARTED" "PROMPT"
+  printf "%-10s %-25s %-22s %s\n" "----------" "-------------------------" "----------------------" "------"
+
+  for STATE_FILE in "$STATE_DIR"/*; do
+    [[ -f "$STATE_FILE" ]] || continue
+    [[ "$STATE_FILE" == *.prompt ]] && continue
+    [[ "$STATE_FILE" == *.launch.py ]] && continue
+
+    STATUS="$(grep '^status=' "$STATE_FILE" | cut -d= -f2)"
+    SESSION="$(grep '^session=' "$STATE_FILE" | cut -d= -f2)"
+    STARTED="$(grep '^started=' "$STATE_FILE" | cut -d= -f2)"
+
+    HASH="$(basename "$STATE_FILE")"
+    PROMPT_FILE="$STATE_DIR/$HASH.prompt"
+    if [[ -f "$PROMPT_FILE" ]]; then
+      PROMPT="$(head -1 "$PROMPT_FILE")"
+    else
+      PROMPT="$(grep '^prompt=' "$STATE_FILE" | cut -d= -f2-)"
+    fi
+
+    if [[ "$STATUS" == "running" ]]; then
+      if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        sed -i '' 's/^status=running/status=done/' "$STATE_FILE"
+        STATUS="done"
+      fi
+    fi
+
+    PROMPT_SHORT="${PROMPT:0:60}"
+    [[ ${#PROMPT} -gt 60 ]] && PROMPT_SHORT="${PROMPT_SHORT}..."
+
+    printf "%-10s %-25s %-22s %s\n" "$STATUS" "$SESSION" "$STARTED" "$PROMPT_SHORT"
+  done
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Step 1: Write Python parser to a temp file and run it.

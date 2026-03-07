@@ -66,7 +66,7 @@ Then:
 mkdir -p ~/.claude/logs
 (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
   echo "<cron> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1"; \
-  echo "*/30 * * * * /opt/homebrew/bin/tq-status ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1") | crontab -
+  echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1") | crontab -
 ```
 
 ## Step 6 — Confirm

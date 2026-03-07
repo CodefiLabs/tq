@@ -12,7 +12,7 @@ PARSE_OUTPUT  PARSE_SCRIPT FIRST_LINE
 
 ## Bash Files
 
-- Executable CLI scripts: `kebab-case`, no extension — `tq`, `tq-status`
+- Executable CLI scripts: `kebab-case`, no extension — `tq`
 - Installer scripts: `kebab-case.sh` — `tq-install.sh`
 - Shebang: always `#!/usr/bin/env bash` (never `#!/bin/bash`)
 

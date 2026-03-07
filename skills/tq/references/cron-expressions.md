@@ -37,7 +37,7 @@ Every scheduled queue gets two cron lines:
 <cron> /opt/homebrew/bin/tq ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
 
 # Status sweep (reap dead sessions every 30 min)
-*/30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1
 ```
 
 ## Updating Crontab
@@ -47,7 +47,7 @@ Replace existing lines for the same queue:
 ```bash
 (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
   echo "<cron> /opt/homebrew/bin/tq ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1"; \
-  echo "*/30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1") | crontab -
+  echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/<name>.yaml >> ~/.claude/logs/tq.log 2>&1") | crontab -
 ```
 
 The `grep -v` removes all existing lines referencing this queue before appending the new ones, ensuring no duplicates.

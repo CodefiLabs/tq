@@ -42,7 +42,7 @@ tq <queue.yaml>                        reads queue YAML (never mutates it)
 ```
 
 ```
-tq-status <queue.yaml>
+tq --status <queue.yaml>
     │
     ├── reads <queue-dir>/.tq/<basename>/    (all state files)
     ├── skips *.prompt and *.launch.py files
@@ -62,17 +62,17 @@ tq-status <queue.yaml>
 - Spawns: `tmux new-session` + `send-keys "python3 <hash>.launch.py"`
 - Idempotent: safe to re-run; skips done and live running tasks
 
-### `scripts/tq-status` — Status Reporter
-- Accepts: same YAML queue file path as `tq`
+### `tq --status` — Status Reporter
+- Accepts: `--status` flag followed by the same YAML queue file path
 - Derives state dir: `<queue-dir>/.tq/<queue-basename>/`
 - Iterates state files; skips `.prompt` and `.launch.py` files by extension
 - Side effect: flips stale `running` states to `done` when tmux session is dead
 - Output: `printf`-formatted table with 4 columns
 
 ### `scripts/tq-install.sh` — Installer
-- Standalone; no runtime dependency on `tq` or `tq-status`
+- Standalone; no runtime dependency on `tq`
 - Resolves plugin root via `CLAUDE_PLUGIN_ROOT` env var or `dirname` of the script
-- Symlinks `scripts/tq` and `scripts/tq-status` into `/opt/homebrew/bin` (or `$TQ_INSTALL_DIR`)
+- Symlinks `scripts/tq` into `/opt/homebrew/bin` (or `$TQ_INSTALL_DIR`)
 - Creates `~/.claude/queues/` and `~/.claude/logs/`
 - Prints example crontab lines on success
 
@@ -122,7 +122,7 @@ State is split across two locations by design:
                     │          │
                     └────┬─────┘
                          │  on-stop.sh fires (Claude exits)
-                         │  OR: tq/tq-status detects dead tmux session
+                         │  OR: tq/tq --status detects dead tmux session
                          ▼
                     ┌──────────┐
                     │          │
@@ -144,14 +144,14 @@ Reset: delete the state file → task returns to pending
 7. Launcher opens Chrome Profile 5, sleeps 2s, then `os.execvp('claude', [...])` — replaces the Python process
 8. Claude runs the task with `--dangerously-skip-permissions --chrome <prompt>`
 9. When Claude exits, the Stop hook fires: `on-stop.sh` runs `sed -i '' 's/^status=running/status=done/' <state-file>`
-10. Next run of `tq` or `tq-status` sees `status=done` and skips the task
+10. Next run of `tq` sees `status=done` and skips the task
 
 ## Skill vs Scripts: Who Consumes What
 
 | Consumer | Consumes |
 |----------|---------- |
-| User (CLI) | `scripts/tq`, `scripts/tq-status` (after install) |
+| User (CLI) | `scripts/tq` (after install) |
 | Claude (agent) | `skills/tq/SKILL.md` + `skills/tq/references/` |
-| Shell (cron) | `/opt/homebrew/bin/tq`, `/opt/homebrew/bin/tq-status` (symlinks) |
+| Shell (cron) | `/opt/homebrew/bin/tq` (symlink) |
 | Claude per-task | `~/.tq/sessions/<hash>/settings.json` (hooks config) |
 | Claude Stop event | `~/.tq/sessions/<hash>/hooks/on-stop.sh` |

@@ -22,7 +22,7 @@ scripts/tq
   ├── invokes: python3 (embedded parser via temp file)
   └── invokes: tmux (new-session, send-keys, has-session, start-server)
 
-scripts/tq-status
+tq --status <queue-yaml>
   ├── reads:   <queue-yaml> (for path derivation only)
   ├── reads:   <queue-dir>/.tq/<basename>/<hash>          (state files)
   ├── reads:   <queue-dir>/.tq/<basename>/<hash>.prompt   (for display)
@@ -31,7 +31,7 @@ scripts/tq-status
 
 skills/tq/SKILL.md
   └── consumed by: Claude model (agent) only
-  └── references:  tq and tq-status CLI names (must be on PATH after install)
+  └── references:  tq CLI name (must be on PATH after install)
 
 ~/.tq/sessions/<hash>/hooks/on-stop.sh
   ├── invoked by: claude CLI Stop hook mechanism
@@ -51,11 +51,11 @@ prompt=fix the login bug in auth service
 started=2026-03-05T10:00:00
 ```
 
-**Writers**: `tq` (initial write, dead-session flip), `tq-status` (dead-session flip), `on-stop.sh` (running→done)
-**Readers**: `tq` (idempotency check), `tq-status` (display), `on-stop.sh` (conditional write)
+**Writers**: `tq` (initial write, dead-session flip), `tq --status` (dead-session flip), `on-stop.sh` (running→done)
+**Readers**: `tq` (idempotency check), `tq --status` (display), `on-stop.sh` (conditional write)
 
 The `<hash>.prompt` file contains the full raw prompt text. The `status` file's `prompt=` line
-holds only the first line (truncated). `tq-status` prefers the `.prompt` file for display.
+holds only the first line (truncated). `tq --status` prefers the `.prompt` file for display.
 
 ## Hash Link Between State Locations
 
@@ -91,5 +91,5 @@ Changing the hashing algorithm breaks this link for all existing tasks.
 3. Called by `claude` automatically when the session exits
 4. Its sole action: `sed -i '' 's/^status=running/status=done/' "$STATE_FILE"`
 
-If this hook is not registered, tasks never auto-complete. `tq-status` provides a fallback
+If this hook is not registered, tasks never auto-complete. `tq --status` provides a fallback
 by detecting dead tmux sessions and flipping state manually.

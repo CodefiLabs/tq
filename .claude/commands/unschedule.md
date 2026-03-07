@@ -19,7 +19,7 @@ Arguments: $ARGUMENTS
    crontab -l 2>/dev/null || echo "(no crontab)"
    ```
 
-3. **Find all tq lines** for this queue (both `tq` and `tq-status`).
+3. **Find all tq lines** for this queue (both `tq` run and `tq --status`).
    If none found, say "No cron schedule found for `<name>` queue."
 
 4. **Remove all lines** referencing this queue:

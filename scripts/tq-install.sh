@@ -48,7 +48,7 @@ else
   exit 1
 fi
 
-for SCRIPT in tq tq-status; do
+for SCRIPT in tq; do
   SRC="$PLUGIN_ROOT/scripts/$SCRIPT"
   DEST="$INSTALL_DIR/$SCRIPT"
   if [[ -L "$DEST" ]]; then
@@ -67,4 +67,4 @@ echo ""
 echo "tq installed. Crontab example (crontab -e):"
 echo ""
 echo "  0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1"
-echo "  */30 * * * * /opt/homebrew/bin/tq-status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1"
+echo "  */30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.claude/logs/tq.log 2>&1"
