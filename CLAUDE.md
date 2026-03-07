@@ -42,20 +42,20 @@ bash "$(git rev-parse --show-toplevel)/scripts/tq-install.sh"
 # Override target: TQ_INSTALL_DIR=/usr/local/bin bash scripts/tq-install.sh
 
 # Run a queue
-tq ~/.claude/queues/morning.yaml
+tq ~/.tq/queues/morning.yaml
 
 # Check status / reap dead sessions
-tq --status ~/.claude/queues/morning.yaml
+tq --status ~/.tq/queues/morning.yaml
 
 # Schedule via cron (crontab -e)
-0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 
 # Reset one task (delete state file — tq will re-run it)
-rm ~/.claude/queues/.tq/morning/a1b2c3d4
+rm ~/.tq/queues/.tq/morning/a1b2c3d4
 
 # Reset entire queue
-rm -rf ~/.claude/queues/.tq/morning/
+rm -rf ~/.tq/queues/.tq/morning/
 
 # Lint bash scripts
 shellcheck scripts/tq scripts/tq-install.sh

@@ -46,7 +46,7 @@ All keyed by 8-char SHA-256 digest of the prompt content:
 
 ## Queue and State Directories
 
-- Queue files: `~/.claude/queues/<name>.yaml` — e.g., `morning.yaml`
+- Queue files: `~/.tq/queues/<name>.yaml` — e.g., `morning.yaml`
 - Task state dir: `<queue-dir>/.tq/<queue-basename>/` — e.g., `.tq/morning/`
 - Session dir: `~/.tq/sessions/<hash>/` — e.g., `~/.tq/sessions/a1b2c3d4/`
 

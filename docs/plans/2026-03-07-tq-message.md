@@ -70,7 +70,7 @@ chmod +x scripts/tq-message
 **Step 3: Smoke test**
 
 ```bash
-bash scripts/tq-message --task abc123 --queue ~/.claude/queues/morning.yaml
+bash scripts/tq-message --task abc123 --queue ~/.tq/queues/morning.yaml
 # Expected: [tq-message] task=abc123 queue=... message=
 
 bash scripts/tq-message
@@ -193,7 +193,7 @@ echo "[tq-message] service=$SERVICE content=$CONTENT task=$TASK_HASH"
 **Step 2: Smoke test — no config file**
 
 ```bash
-bash scripts/tq-message --task abc123 --queue ~/.claude/queues/morning.yaml
+bash scripts/tq-message --task abc123 --queue ~/.tq/queues/morning.yaml
 # Expected: silent exit (no ~/.tq/message.yaml)
 ```
 
@@ -210,7 +210,7 @@ telegram:
   chat_id: "12345"
 EOF
 
-bash scripts/tq-message --task abc123 --queue ~/.claude/queues/morning.yaml
+bash scripts/tq-message --task abc123 --queue ~/.tq/queues/morning.yaml
 # Expected: [tq-message] service=telegram content=status task=abc123
 ```
 
@@ -570,7 +570,7 @@ For `--prompt` mode (`sys.argv[1] == '--prompt'`), there's no queue file. Add a 
 **Step 4: Manual test — run tq on a queue and verify on-stop.sh contents**
 
 ```bash
-tq ~/.claude/queues/morning.yaml
+tq ~/.tq/queues/morning.yaml
 # Find the generated on-stop.sh:
 cat ~/.tq/sessions/<hash>/hooks/on-stop.sh
 # Expected: see TQ_HASH, TQ_QUEUE_FILE exports and tq-message call
@@ -579,7 +579,7 @@ cat ~/.tq/sessions/<hash>/hooks/on-stop.sh
 **Step 5: Run tq and confirm no errors**
 
 ```bash
-bash scripts/tq ~/.claude/queues/morning.yaml
+bash scripts/tq ~/.tq/queues/morning.yaml
 # Expected: tasks spawn as before, no new errors
 ```
 
@@ -652,17 +652,17 @@ cat .gitignore | grep tq
 
 ```bash
 # Run a queue to completion, then:
-tq --status ~/.claude/queues/morning.yaml
+tq --status ~/.tq/queues/morning.yaml
 # Expected: if all tasks done → Telegram message with queue summary
 # Second run of --status:
-tq --status ~/.claude/queues/morning.yaml
+tq --status ~/.tq/queues/morning.yaml
 # Expected: no second notification (sentinel exists)
 ```
 
 **Step 6: Run tq --status and confirm no errors**
 
 ```bash
-bash scripts/tq --status ~/.claude/queues/morning.yaml
+bash scripts/tq --status ~/.tq/queues/morning.yaml
 ```
 
 **Step 7: Commit**

@@ -97,7 +97,7 @@ If you need to change the profile, edit `scripts/tq` directly — search for `Pr
 
 | Term | Meaning |
 |------|---------|
-| queue | A YAML file defining a list of tasks (`~/.claude/queues/<name>.yaml`) |
+| queue | A YAML file defining a list of tasks (`~/.tq/queues/<name>.yaml`) |
 | task | A single `prompt:` entry in the queue YAML |
 | hash | `sha256(prompt_text)[:8]` — the stable task identity across runs |
 | state file | `<queue-dir>/.tq/<name>/<hash>` — key=value store: status, session, started |

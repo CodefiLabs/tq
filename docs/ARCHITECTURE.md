@@ -73,7 +73,7 @@ tq --status <queue.yaml>
 - Standalone; no runtime dependency on `tq`
 - Resolves plugin root via `CLAUDE_PLUGIN_ROOT` env var or `dirname` of the script
 - Symlinks `scripts/tq` into `/opt/homebrew/bin` (or `$TQ_INSTALL_DIR`)
-- Creates `~/.claude/queues/` and `~/.tq/logs/`
+- Creates `~/.tq/queues/` and `~/.tq/logs/`
 - Prints example crontab lines on success
 
 ### `skills/tq/SKILL.md` — Claude Plugin Skill
@@ -135,7 +135,7 @@ Reset: delete the state file → task returns to pending
 
 ## Data Flow: How a Task Moves from Pending to Done
 
-1. User creates `~/.claude/queues/morning.yaml` with one or more `tasks[*].prompt` entries
+1. User creates `~/.tq/queues/morning.yaml` with one or more `tasks[*].prompt` entries
 2. `tq morning.yaml` runs
 3. Python parser computes `h = sha256(prompt)[:8]`, writes `<h>.prompt`, `<h>.launch.py`, `settings.json`, `on-stop.sh`
 4. Bash loop finds no state file for `h` → it's pending

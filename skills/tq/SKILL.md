@@ -22,7 +22,7 @@ Tasks are idempotent — running `tq` again skips `done` and live `running` task
 
 ## Queue File Format
 
-Location: `~/.claude/queues/<name>.yaml`
+Location: `~/.tq/queues/<name>.yaml`
 
 ```yaml
 cwd: /path/to/working/directory   # optional — where claude runs for each task
@@ -35,7 +35,7 @@ Queue files are **read-only** — tq never modifies them.
 
 ## State
 
-State dir: `~/.claude/queues/.tq/<queue-basename>/`
+State dir: `~/.tq/queues/.tq/<queue-basename>/`
 One file per task, named by 8-char shasum of the prompt:
 
 ```
@@ -70,8 +70,8 @@ tq --status <queue.yaml>  # print status table; flip dead sessions to done
 ## Crontab Pattern
 
 ```cron
-0 9 * * * /opt/homebrew/bin/tq ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.claude/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
 The `tq --status` cron runs every 30 min to reap dead sessions and flip their state to `done`.
@@ -86,7 +86,7 @@ When using `/todo` without an explicit queue name:
 ## Reset
 
 - One task: delete its state file from `.tq/<queue-basename>/`
-- Entire queue: `rm -rf ~/.claude/queues/.tq/<queue-basename>/`
+- Entire queue: `rm -rf ~/.tq/queues/.tq/<queue-basename>/`
 
 ## Chrome Integration
 
