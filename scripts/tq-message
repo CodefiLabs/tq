@@ -121,4 +121,112 @@ if [[ -z "$SERVICE" ]] || { [[ "$SERVICE" == "telegram" ]] && [[ -z "$TG_TOKEN" 
   exit 0
 fi
 
-echo "[tq-message] service=$SERVICE content=$CONTENT task=$TASK_HASH"
+# Resolve state dir from queue file and task hash
+if [[ -n "$TASK_HASH" && -n "$QUEUE_FILE" ]]; then
+  QUEUE_DIR="$(dirname "$QUEUE_FILE")"
+  QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
+  STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
+  STATE_FILE="$STATE_DIR/$TASK_HASH"
+  PROMPT_FILE="$STATE_DIR/$TASK_HASH.prompt"
+else
+  STATE_DIR=""
+  STATE_FILE=""
+  PROMPT_FILE=""
+fi
+
+build_message() {
+  local content_type="$1"
+  local hash="$2"
+  local state_file="$3"
+  local prompt_file="$4"
+  local session="$5"
+
+  local first_line status started duration msg
+
+  if [[ -f "$prompt_file" ]]; then
+    first_line="$(head -1 "$prompt_file")"
+  elif [[ -f "$state_file" ]]; then
+    first_line="$(grep '^prompt=' "$state_file" | cut -d= -f2-)"
+  else
+    first_line="(unknown task)"
+  fi
+
+  if [[ -f "$state_file" ]]; then
+    status="$(grep '^status=' "$state_file" | cut -d= -f2)"
+    started="$(grep '^started=' "$state_file" | cut -d= -f2)"
+  else
+    status="done"
+    started=""
+  fi
+
+  # Calculate duration in minutes
+  duration=""
+  if [[ -n "$started" ]]; then
+    start_epoch="$(python3 -c "import datetime; print(int(datetime.datetime.fromisoformat('${started}').timestamp()))" 2>/dev/null || echo "")"
+    if [[ -n "$start_epoch" ]]; then
+      now_epoch="$(date +%s)"
+      elapsed=$(( now_epoch - start_epoch ))
+      duration="${elapsed}s"
+      if (( elapsed >= 60 )); then
+        duration="$(( elapsed / 60 ))m $(( elapsed % 60 ))s"
+      fi
+    fi
+  fi
+
+  case "$content_type" in
+    status)
+      msg="tq: task ${status}
+${first_line:0:100}
+${duration:+Duration: $duration}"
+      ;;
+    details)
+      msg="tq: task ${status} [${hash}]
+Prompt: ${first_line:0:200}
+${duration:+Duration: $duration}"
+      ;;
+    log)
+      if [[ -n "$session" ]] && tmux has-session -t "$session" 2>/dev/null; then
+        local pane_text
+        pane_text="$(tmux capture-pane -t "$session" -p -S -200 2>/dev/null || echo "(could not capture pane)")"
+        msg="tq: task ${status} [${hash}]
+${first_line:0:80}
+
+Last output:
+\`\`\`
+${pane_text: -1500}
+\`\`\`"
+      else
+        msg="tq: task ${status} [${hash}]
+${first_line:0:80}
+(session no longer active — log unavailable)"
+      fi
+      ;;
+    *)
+      msg="(unknown content type: $content_type)"
+      ;;
+  esac
+
+  echo "$msg"
+}
+
+# If --message provided directly (e.g. from /tq-message slash command), skip generation
+if [[ -z "$MESSAGE_TEXT" ]]; then
+  case "$CONTENT" in
+    summary)
+      # summary mode: handled by send-keys in Task 4
+      # if no session available, fall back to details
+      if [[ -z "$SESSION" ]]; then
+        MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
+      fi
+      ;;
+    status|details|log)
+      MESSAGE_TEXT="$(build_message "$CONTENT" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "$SESSION")"
+      ;;
+    *)
+      echo "Error: unknown content type: $CONTENT" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+echo "[tq-message] MESSAGE_TEXT=${MESSAGE_TEXT:0:80}"
