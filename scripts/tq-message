@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+TASK_HASH=""
+QUEUE_FILE=""
+MESSAGE_TEXT=""
+SESSION=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1:-}" in
+    --task)    TASK_HASH="${2:-}";    shift 2 ;;
+    --queue)   QUEUE_FILE="${2:-}";   shift 2 ;;
+    --message) MESSAGE_TEXT="${2:-}"; shift 2 ;;
+    --session) SESSION="${2:-}";      shift 2 ;;
+    --) shift; break ;;
+    -*) echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)  break ;;
+  esac
+done
+
+if [[ -z "$TASK_HASH" && -z "$QUEUE_FILE" ]]; then
+  echo "Usage: tq-message --task <hash> --queue <file.yaml> [--message <text>] [--session <name>]" >&2
+  echo "       tq-message --queue <file.yaml> [--message <text>]" >&2
+  exit 1
+fi
+
+if [[ -n "$QUEUE_FILE" ]]; then
+  QUEUE_FILE="$(realpath "$QUEUE_FILE")"
+  if [[ ! -f "$QUEUE_FILE" ]]; then
+    echo "Error: queue file not found: $QUEUE_FILE" >&2
+    exit 1
+  fi
+fi
+
+echo "[tq-message] task=$TASK_HASH queue=$QUEUE_FILE message=${MESSAGE_TEXT:0:40}"
