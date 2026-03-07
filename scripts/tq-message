@@ -229,4 +229,52 @@ if [[ -z "$MESSAGE_TEXT" ]]; then
   esac
 fi
 
-echo "[tq-message] MESSAGE_TEXT=${MESSAGE_TEXT:0:80}"
+send_telegram() {
+  local token="$1"
+  local chat_id="$2"
+  local text="$3"
+
+  local response
+  response="$(curl -s -X POST \
+    "https://api.telegram.org/bot${token}/sendMessage" \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=${text}" \
+    -d "parse_mode=Markdown" 2>&1)"
+
+  if echo "$response" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
+    echo "[tq-message] sent via Telegram"
+  else
+    echo "[tq-message] Telegram error: $response" >&2
+    exit 1
+  fi
+}
+
+deliver() {
+  local service="$1"
+  local msg="$2"
+  case "$service" in
+    telegram) send_telegram "$TG_TOKEN" "$TG_CHAT" "$msg" ;;
+    *) echo "[tq-message] unknown service: $service" >&2; exit 1 ;;
+  esac
+}
+
+# Summary mode with a live session: ask Claude to generate and send
+if [[ "$CONTENT" == "summary" && -n "$SESSION" && -z "$MESSAGE_TEXT" ]]; then
+  if tmux has-session -t "$SESSION" 2>/dev/null; then
+    # Pass hash and queue path as arguments to the slash command
+    tmux send-keys -t "$SESSION" "/tq-message ${TASK_HASH} ${QUEUE_FILE}" Enter
+    # Give Claude time to summarize and call back tq-message --message
+    sleep 45
+    # Close the session
+    tmux send-keys -t "$SESSION" "" Enter
+    exit 0
+  else
+    # Session gone — fall back to details
+    MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
+  fi
+fi
+
+# Deliver message if we have one
+if [[ -n "$MESSAGE_TEXT" ]]; then
+  deliver "$SERVICE" "$MESSAGE_TEXT"
+fi
