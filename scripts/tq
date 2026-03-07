@@ -68,10 +68,14 @@ if [[ "$STATUS_MODE" == "1" ]]; then
   printf "%-10s %-25s %-22s %s\n" "STATUS" "SESSION" "STARTED" "PROMPT"
   printf "%-10s %-25s %-22s %s\n" "----------" "-------------------------" "----------------------" "------"
 
+  TOTAL_TASKS=0
+  DONE_TASKS=0
+
   for STATE_FILE in "$STATE_DIR"/*; do
     [[ -f "$STATE_FILE" ]] || continue
     [[ "$STATE_FILE" == *.prompt ]] && continue
     [[ "$STATE_FILE" == *.launch.py ]] && continue
+    [[ "$(basename "$STATE_FILE")" == .queue-notified ]] && continue
 
     STATUS="$(grep '^status=' "$STATE_FILE" | cut -d= -f2)"
     SESSION="$(grep '^session=' "$STATE_FILE" | cut -d= -f2)"
@@ -96,7 +100,22 @@ if [[ "$STATUS_MODE" == "1" ]]; then
     [[ ${#PROMPT} -gt 60 ]] && PROMPT_SHORT="${PROMPT_SHORT}..."
 
     printf "%-10s %-25s %-22s %s\n" "$STATUS" "$SESSION" "$STARTED" "$PROMPT_SHORT"
+
+    TOTAL_TASKS=$(( TOTAL_TASKS + 1 ))
+    if [[ "$STATUS" == "done" ]]; then
+      DONE_TASKS=$(( DONE_TASKS + 1 ))
+    fi
   done
+
+  # Queue completion notification
+  SENTINEL="$STATE_DIR/.queue-notified"
+  if [[ "$TOTAL_TASKS" -gt 0 && "$TOTAL_TASKS" -eq "$DONE_TASKS" && ! -f "$SENTINEL" ]]; then
+    touch "$SENTINEL"
+    if command -v tq-message &>/dev/null; then
+      tq-message --queue "$QUEUE_FILE"
+    fi
+  fi
+
   exit 0
 fi
 
@@ -381,6 +400,9 @@ window=$WINDOW
 prompt=$FIRST_LINE
 started=$(date -u +%Y-%m-%dT%H:%M:%S)
 EOF
+
+  # Reset queue-notified sentinel so completion fires again after re-run
+  rm -f "$STATE_DIR/.queue-notified"
 
   # Spawn tmux session.
   # IMPORTANT: start the window WITHOUT a command so tmux uses the user's default
