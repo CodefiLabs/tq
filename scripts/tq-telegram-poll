@@ -98,7 +98,10 @@ for update in results:
         continue
     text = msg.get('text', '').strip()
     if text:
-        messages.append(text)
+        chat_id = msg['chat']['id']
+        message_id = msg['message_id']
+        # Output as tab-separated: chat_id<TAB>message_id<TAB>text
+        messages.append(f"{chat_id}\t{message_id}\t{text}")
 
 if new_offset is not None:
     with open(offset_file, 'w') as f:
@@ -113,9 +116,14 @@ MESSAGES="$(python3 "$PROCESS_SCRIPT" "$UPDATES" "$USER_ID" "$OFFSET_FILE")"
 # --- Spawn tq --prompt for each message ---
 mkdir -p "$HOME/.tq/workspace"
 
-while IFS= read -r MSG; do
+while IFS=$'\t' read -r CHAT_ID MSG_ID MSG; do
   if [[ -n "$MSG" ]]; then
     echo "[tq-telegram-poll] prompt: ${MSG:0:60}"
+    # React with 👀 to acknowledge receipt
+    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setMessageReaction" \
+      -H "Content-Type: application/json" \
+      --data-raw "{\"chat_id\":${CHAT_ID},\"message_id\":${MSG_ID},\"reaction\":[{\"type\":\"emoji\",\"emoji\":\"👀\"}]}" \
+      > /dev/null 2>&1 || true
     tq --prompt "$MSG"
   fi
 done <<< "$MESSAGES"
