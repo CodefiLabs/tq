@@ -281,7 +281,7 @@ for (prompt, cwd) in tasks:
         stop_script += 'export TQ_QUEUE_FILE=""\n'
     stop_script += 'if command -v tq-message &>/dev/null; then\n'
     stop_script += '  SESSION="$(grep \'^session=\' "$STATE_FILE" | cut -d= -f2)"\n'
-    stop_script += '  tq-message --task "$TQ_HASH" --queue "$TQ_QUEUE_FILE" --session "$SESSION"\n'
+    stop_script += '  tq-message --task "$TQ_HASH" --queue "$TQ_QUEUE_FILE" --state-file "$STATE_FILE" --session "$SESSION"\n'
     stop_script += 'fi\n'
     with open(stop_hook, 'w') as f:
         f.write(stop_script)

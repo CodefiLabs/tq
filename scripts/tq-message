@@ -7,13 +7,15 @@ TASK_HASH=""
 QUEUE_FILE=""
 MESSAGE_TEXT=""
 SESSION=""
+EXPLICIT_STATE_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
-    --task)    TASK_HASH="${2:-}";    shift 2 ;;
-    --queue)   QUEUE_FILE="${2:-}";   shift 2 ;;
-    --message) MESSAGE_TEXT="${2:-}"; shift 2 ;;
-    --session) SESSION="${2:-}";      shift 2 ;;
+    --task)       TASK_HASH="${2:-}";          shift 2 ;;
+    --queue)      QUEUE_FILE="${2:-}";         shift 2 ;;
+    --message)    MESSAGE_TEXT="${2:-}";       shift 2 ;;
+    --session)    SESSION="${2:-}";            shift 2 ;;
+    --state-file) EXPLICIT_STATE_FILE="${2:-}"; shift 2 ;;
     --) shift; break ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *)  break ;;
@@ -135,6 +137,9 @@ fi
 if [[ -n "$TASK_HASH" && -n "$STATE_DIR" ]]; then
   STATE_FILE="$STATE_DIR/$TASK_HASH"
   PROMPT_FILE="$STATE_DIR/$TASK_HASH.prompt"
+elif [[ -n "$EXPLICIT_STATE_FILE" ]]; then
+  STATE_FILE="$EXPLICIT_STATE_FILE"
+  PROMPT_FILE="${EXPLICIT_STATE_FILE}.prompt"
 else
   STATE_FILE=""
   PROMPT_FILE=""
