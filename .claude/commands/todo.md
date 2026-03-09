@@ -17,6 +17,16 @@ pwd
 ```
 Store this as `TASK_CWD`. This is where `claude` will run when the task executes.
 
+Also read the workspace map for context:
+```bash
+cat ~/.tq/workspace-map.md 2>/dev/null || echo "(no workspace map — run /init to generate one)"
+```
+
+Use the workspace map to:
+- Match a project name mentioned in `$ARGUMENTS` (e.g. "fix the login bug in samson" → look up `samson` → use its path as `TASK_CWD`)
+- Confirm `TASK_CWD` is a known project (informational only — don't block if it's not listed)
+- Suggest `cwd` if the user hasn't implied one and the current directory isn't a recognizable project
+
 ## Step 2 — Parse the request naturally
 
 From `$ARGUMENTS`, extract:
