@@ -95,14 +95,18 @@ running    tq-review-the-readme-451236 2026-03-06T09:01:04  Review the README an
 
 ## Queue File Format
 
-Queue files are standard YAML with two top-level keys:
+Queue files are standard YAML:
 
 ```yaml
-cwd: /path/to/working/directory   # optional — sets working directory for each claude task
+cwd: /path/to/working/directory   # sets working directory for each claude task
 
 tasks:
   # Inline prompt (single line)
   - prompt: fix the login bug in auth service
+
+  # Named task — human-readable label for tmux session naming
+  - name: write-tests
+    prompt: write unit tests for the payment module
 
   # Block literal (|) — preserves line breaks exactly
   - prompt: |
@@ -120,6 +124,27 @@ tasks:
 ```
 
 Queue files are **never modified** by `tq` — they are read-only inputs.
+
+### Notifications (optional)
+
+Add a `message:` block to receive a notification when each task completes:
+
+```yaml
+cwd: /Users/yourname/projects/myapp
+message:
+  service: telegram       # telegram | slack
+  content: summary        # summary | status | details | log
+tasks:
+  - prompt: refactor the auth module
+```
+
+**Content types:**
+- `summary` — Claude writes a 2–3 sentence digest of what it accomplished
+- `status` — task name, done/failed, duration (no live Claude session needed)
+- `details` — prompt first line, status, duration, hash
+- `log` — last 200 lines of tmux pane scrollback
+
+The `message:` block overrides the global config for that queue. Global credentials (bot tokens etc.) live in `~/.tq/config/message.yaml` — never in queue files. Run `/setup-telegram` to configure Telegram notifications interactively.
 
 ## Commands
 
@@ -146,6 +171,20 @@ tq --status ~/.tq/queues/morning.yaml
 
 Run this via cron every 30 minutes to keep state accurate even if sessions die unexpectedly.
 
+### `tq --prompt <text>`
+
+Run a single ad-hoc prompt without a queue file. Useful for one-off tasks.
+
+```bash
+tq --prompt "fix the login bug in auth service" --cwd ~/projects/myapp --name fix-login
+```
+
+Options:
+- `--prompt <text>` — the prompt to run (required for this mode)
+- `--cwd <dir>` — working directory (defaults to `~/.tq/workspace`)
+- `--name <name>` — label for tmux session naming (defaults to `adhoc`)
+- `--notify <type>` — completion notification: `macos`, `bell`, or a path to a shell script
+
 ## How It Works
 
 **Step 1 — Parse**: `tq` runs an embedded Python script (written to a temp file) that reads the queue YAML and generates three files per task, all named by an 8-character SHA-256 hash of the prompt:
@@ -168,15 +207,29 @@ Once installed, Claude can manage your task queues via slash commands:
 
 | Command | Purpose |
 |---------|---------|
+| `/init [dirs...]` | Scan workspace directories and build a project catalog for `cwd:` lookup |
 | `/todo <natural language>` | Create or update a queue and optionally schedule it |
 | `/schedule <natural language>` | Add or update a cron schedule for a queue |
 | `/pause <queue>` | Remove the run cron line (keep status-check) |
 | `/unschedule <queue>` | Remove all cron lines for a queue |
 | `/jobs` | List all scheduled tq cron jobs |
 | `/health` | System-wide diagnostics |
+| `/setup-telegram` | Interactive wizard to configure Telegram notifications |
 | `/install` | Symlink tq binaries to PATH |
 
 Claude will infer the queue name from context: "every morning" → `morning.yaml`, "daily" → `daily.yaml`, or the current directory's basename if no schedule keyword is present.
+
+### `/init` — Workspace setup
+
+Run `/init` once per machine to tell tq where your projects live:
+
+```
+/init ~/Sites ~/Projects
+```
+
+This scans the given directories for git repositories, writes `~/.tq/config/workspaces.yaml` (which directories to scan), and generates `~/.tq/workspace-map.md` (a catalog of every discovered project with its path and type). Re-run `/init` anytime to refresh after cloning new repos.
+
+Once initialized, `/todo` uses the workspace map to resolve project names in natural language — e.g. "fix the login bug in myapp" will automatically set `cwd:` to myapp's full path.
 
 ## State Files
 
