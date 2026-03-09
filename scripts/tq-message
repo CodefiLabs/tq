@@ -123,14 +123,19 @@ if [[ -z "$SERVICE" ]] || { [[ "$SERVICE" == "telegram" ]] && [[ -z "$TG_TOKEN" 
 fi
 
 # Resolve state dir from queue file and task hash
-if [[ -n "$TASK_HASH" && -n "$QUEUE_FILE" ]]; then
+if [[ -n "$QUEUE_FILE" ]]; then
   QUEUE_DIR="$(dirname "$QUEUE_FILE")"
   QUEUE_BASENAME="$(basename "$QUEUE_FILE" .yaml)"
   STATE_DIR="$QUEUE_DIR/.tq/$QUEUE_BASENAME"
+else
+  QUEUE_DIR=""
+  QUEUE_BASENAME=""
+  STATE_DIR=""
+fi
+if [[ -n "$TASK_HASH" && -n "$STATE_DIR" ]]; then
   STATE_FILE="$STATE_DIR/$TASK_HASH"
   PROMPT_FILE="$STATE_DIR/$TASK_HASH.prompt"
 else
-  STATE_DIR=""
   STATE_FILE=""
   PROMPT_FILE=""
 fi
@@ -210,24 +215,51 @@ ${first_line:0:80}
   echo "$msg"
 }
 
+build_queue_message() {
+  local queue_basename="$1"
+  local state_dir="$2"
+  local total=0 done_count=0
+
+  if [[ -d "$state_dir" ]]; then
+    for sf in "$state_dir"/*; do
+      [[ -f "$sf" ]] || continue
+      [[ "$sf" == *.prompt ]] && continue
+      [[ "$sf" == *.launch.py ]] && continue
+      [[ "$(basename "$sf")" == .queue-notified ]] && continue
+      total=$(( total + 1 ))
+      local s
+      s="$(grep '^status=' "$sf" | cut -d= -f2)"
+      [[ "$s" == "done" ]] && done_count=$(( done_count + 1 ))
+    done
+  fi
+
+  echo "tq: queue complete
+${queue_basename}.yaml (${done_count}/${total} tasks done)"
+}
+
 # If --message provided directly (e.g. from /tq-message slash command), skip generation
 if [[ -z "$MESSAGE_TEXT" ]]; then
-  case "$CONTENT" in
-    summary)
-      # summary mode: handled by send-keys in Task 4
-      # if no session available, fall back to details
-      if [[ -z "$SESSION" ]]; then
-        MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
-      fi
-      ;;
-    status|details|log)
-      MESSAGE_TEXT="$(build_message "$CONTENT" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "$SESSION")"
-      ;;
-    *)
-      echo "Error: unknown content type: $CONTENT" >&2
-      exit 1
-      ;;
-  esac
+  # Queue-level notification (no specific task)
+  if [[ -z "$TASK_HASH" && -n "$QUEUE_BASENAME" ]]; then
+    MESSAGE_TEXT="$(build_queue_message "$QUEUE_BASENAME" "$STATE_DIR")"
+  else
+    case "$CONTENT" in
+      summary)
+        # summary mode: handled by send-keys in Task 4
+        # if no session available, fall back to details
+        if [[ -z "$SESSION" ]]; then
+          MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
+        fi
+        ;;
+      status|details|log)
+        MESSAGE_TEXT="$(build_message "$CONTENT" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "$SESSION")"
+        ;;
+      *)
+        echo "Error: unknown content type: $CONTENT" >&2
+        exit 1
+        ;;
+    esac
+  fi
 fi
 
 send_telegram() {
