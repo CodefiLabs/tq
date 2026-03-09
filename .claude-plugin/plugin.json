@@ -1,12 +1,13 @@
 {
   "name": "tq",
   "version": "1.0.0",
-  "description": "Claude task queue runner — batch Claude prompts into tmux sessions via YAML queue files",
+  "description": "Task queue runner that spawns Claude AI tasks as independent tmux sessions.",
   "author": {
-    "name": "Kevin Kirchner",
-    "email": "kevnk@hey.com"
+    "name": "codefilabs",
+    "url": "https://github.com/codefilabs/tq"
   },
-  "repository": "https://github.com/kevnk/tq",
+  "homepage": "https://github.com/codefilabs/tq",
+  "repository": "https://github.com/codefilabs/tq",
   "license": "MIT",
-  "keywords": ["queue", "tmux", "claude", "batch", "cron", "automation"]
+  "keywords": ["claude", "tmux", "task-queue", "automation"]
 }
