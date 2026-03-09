@@ -1,0 +1,41 @@
+{
+  "name": "@codefilabs/tq",
+  "version": "0.0.2",
+  "description": "A lightweight task queue runner that spawns Claude AI tasks as independent tmux sessions",
+  "keywords": [
+    "claude",
+    "ai",
+    "tmux",
+    "queue",
+    "automation",
+    "task-runner",
+    "cron"
+  ],
+  "homepage": "https://github.com/CodefiLabs/tq#readme",
+  "bugs": {
+    "url": "https://github.com/CodefiLabs/tq/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodefiLabs/tq.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "tq": "scripts/tq",
+    "tq-message": "scripts/tq-message",
+    "tq-setup": "scripts/tq-setup",
+    "tq-telegram-poll": "scripts/tq-telegram-poll",
+    "tq-telegram-watchdog": "scripts/tq-telegram-watchdog"
+  },
+  "files": [
+    "scripts/",
+    "skills/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

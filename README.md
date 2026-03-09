@@ -24,7 +24,7 @@ The tool is designed for macOS with cron scheduling in mind: drop a queue YAML i
 Run this in your terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kevnk/tq/main/scripts/tq-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CodefiLabs/tq/main/scripts/tq-install.sh | bash
 ```
 
 Here's exactly what that command does:
