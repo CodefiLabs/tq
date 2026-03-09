@@ -37,5 +37,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "postpublish": "node tools/update-marketplace.js"
   }
 }
