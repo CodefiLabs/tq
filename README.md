@@ -31,9 +31,9 @@ Here's exactly what that command does:
 
 1. **Downloads the install script** from this repo over HTTPS (`-fsSL` = fail on error, silent, follow redirects) and pipes it directly to `bash` — nothing is saved to disk.
 
-2. **Registers the tq marketplace** with Claude Code by running `claude plugin marketplace add kevnk/tq`. This clones the tq repo into `~/.claude/plugins/marketplaces/tq/` so Claude knows where to find it.
+2. **Registers the codefilabs marketplace** with Claude Code by running `claude plugin marketplace add codefilabs/marketplace`. This clones the marketplace repo into `~/.claude/plugins/marketplaces/codefilabs/` so Claude knows where to find it.
 
-3. **Installs the tq plugin** by running `claude plugin install tq@tq`. This caches the plugin files into `~/.claude/plugins/cache/tq/tq/<version>/` and registers the plugin's skills and slash commands with Claude Code. After this, Claude will recognize commands like `/todo`, `/schedule`, `/jobs`, and `/health`.
+3. **Installs the tq plugin** by running `claude plugin install tq@codefilabs`. This caches the plugin files into `~/.claude/plugins/cache/tq/codefilabs/<version>/` and registers the plugin's skills and slash commands with Claude Code. After this, Claude will recognize commands like `/todo`, `/schedule`, `/jobs`, and `/health`.
 
 4. **Symlinks `tq`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so the command is available in your shell and in cron jobs.
 
