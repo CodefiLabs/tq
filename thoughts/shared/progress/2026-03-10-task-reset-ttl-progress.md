@@ -25,3 +25,15 @@ All 5 changes from the plan were implemented in `scripts/tq`: (1) Python parser 
 - Direct implementation (no sub-agents needed)
 
 ---
+
+## Phase 2
+
+**Completed**: 2026-03-10
+**Status**: COMPLETE
+**Commits**: dee3a9b
+**Tests**: PASS
+
+### Summary
+The TTL-based reset logic was added to the dispatch loop in `scripts/tq`. When a task has `status=done` and `RESET_MODE` is a duration string (not blank, not `on-complete`), the code now reads the `completed=` epoch from the state file, converts the duration to seconds via an inline `python3 -c` call (supporting `h`, `d`, `m` suffixes), and compares against `date +%s`. If the TTL has elapsed, the state file is deleted and the loop falls through to spawn logic showing `[reset] (TTL expired)`. If not yet expired — or if `COMPLETED` is missing — it shows `[done]` as before. The `# shellcheck disable=SC2034` comment added in Phase 1 was removed since `RESET_MODE` is now actively used.
+
+---
