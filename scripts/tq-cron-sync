@@ -24,7 +24,7 @@ mkdir -p "$QUEUES_DIR" "$LOGS_DIR"
 # ---------------------------------------------------------------------------
 # Scan ~/.tq/queues/*.yaml for schedule: keys via embedded Python temp file
 # ---------------------------------------------------------------------------
-SCAN_SCRIPT=$(mktemp /tmp/tq-scan-XXXXXX.py)
+SCAN_SCRIPT=$(mktemp /tmp/tq-scan-XXXXXX)
 CRONTAB_NEW=$(mktemp /tmp/tq-crontab-XXXXXX)
 trap 'rm -f "$SCAN_SCRIPT" "$CRONTAB_NEW"' EXIT
 

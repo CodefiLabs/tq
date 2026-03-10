@@ -32,7 +32,7 @@ read -r _IGNORED
 
 UPDATES="$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=0&limit=10&timeout=0" 2>&1)"
 
-DISCOVER_SCRIPT=$(mktemp /tmp/tq-setup-discover-XXXXXX.py)
+DISCOVER_SCRIPT=$(mktemp /tmp/tq-setup-discover-XXXXXX)
 trap 'rm -f "$DISCOVER_SCRIPT"' EXIT
 
 cat > "$DISCOVER_SCRIPT" <<'PYEOF'

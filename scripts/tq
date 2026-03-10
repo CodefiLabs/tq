@@ -128,7 +128,7 @@ fi
 # (Using a temp file avoids bash 3.2 bug: single quotes inside <<'HEREDOC'
 #  inside $() are incorrectly scanned by the quote counter.)
 # ---------------------------------------------------------------------------
-PARSE_SCRIPT=$(mktemp /tmp/tq-parse-XXXXXX.py)
+PARSE_SCRIPT=$(mktemp /tmp/tq-parse-XXXXXX)
 trap 'rm -f "$PARSE_SCRIPT"' EXIT
 
 cat > "$PARSE_SCRIPT" <<'PYEOF'

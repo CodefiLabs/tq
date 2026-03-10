@@ -11,7 +11,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 0
 fi
 
-CONFIG_SCRIPT=$(mktemp /tmp/tq-poll-config-XXXXXX.py)
+CONFIG_SCRIPT=$(mktemp /tmp/tq-poll-config-XXXXXX)
 trap 'rm -f "$CONFIG_SCRIPT"' EXIT
 
 cat > "$CONFIG_SCRIPT" <<'PYEOF'
@@ -69,7 +69,7 @@ fi
 UPDATES="$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${OFFSET}&limit=10&timeout=0" 2>&1)"
 
 # --- Process updates ---
-PROCESS_SCRIPT=$(mktemp /tmp/tq-poll-process-XXXXXX.py)
+PROCESS_SCRIPT=$(mktemp /tmp/tq-poll-process-XXXXXX)
 trap 'rm -f "$CONFIG_SCRIPT" "$PROCESS_SCRIPT"' EXIT
 
 cat > "$PROCESS_SCRIPT" <<'PYEOF'

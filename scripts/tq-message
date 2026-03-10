@@ -36,7 +36,7 @@ if [[ -n "$QUEUE_FILE" ]]; then
   fi
 fi
 
-CONFIG_SCRIPT=$(mktemp /tmp/tq-message-config-XXXXXX.py)
+CONFIG_SCRIPT=$(mktemp /tmp/tq-message-config-XXXXXX)
 trap 'rm -f "$CONFIG_SCRIPT"' EXIT
 
 cat > "$CONFIG_SCRIPT" <<'PYEOF'
