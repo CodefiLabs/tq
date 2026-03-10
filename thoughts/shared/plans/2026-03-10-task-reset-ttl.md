@@ -257,10 +257,10 @@ In Step 5 (schedule handling), after writing the cron lines:
 ### Success Criteria:
 
 #### Manual Verification:
-- [ ] Run `/schedule run morning queue every weekday at 9am` → queue YAML gets `reset: 12h`
-- [ ] Run `/todo check CI every 4 hours` → queue YAML gets `reset: 2h`
-- [ ] Run `/todo fix login bug` (no schedule) → no `reset:` added to queue YAML
-- [ ] Existing queue with manual `reset: on-complete` is not overwritten by `/schedule`
+- [x] Run `/schedule run morning queue every weekday at 9am` → queue YAML gets `reset: 12h`
+- [x] Run `/todo check CI every 4 hours` → queue YAML gets `reset: 2h`
+- [x] Run `/todo fix login bug` (no schedule) → no `reset:` added to queue YAML
+- [x] Existing queue with manual `reset: on-complete` is not overwritten by `/schedule`
 
 ---
 

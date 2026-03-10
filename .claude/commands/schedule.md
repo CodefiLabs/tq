@@ -2,7 +2,7 @@
 name: schedule
 description: Add or update a cron schedule for a tq queue. Accepts natural language like "run the morning queue every day at 9am" or "schedule refactor queue every weekday at 6pm".
 tags: tq, cron, schedule, queue
-allowed-tools: Bash(ls), Bash(mkdir), Bash(crontab)
+allowed-tools: Bash(ls), Bash(mkdir), Bash(crontab), Read, Write
 ---
 
 You are a cron schedule manager for the `tq` CLI tool.
@@ -27,6 +27,21 @@ Arguments: $ARGUMENTS
    ls ~/.tq/queues/<name>.yaml
    ```
    If missing, suggest running `/todo <name>` first.
+
+2b. **Compute and write `reset:` TTL**:
+
+   Given the cron expression from step 1, determine the minimum interval between consecutive runs and write `reset: <N>h` (or `reset: <N>d`) into the queue YAML as the first top-level key (before `cwd:`).
+
+   **Inference rules** (apply the first that matches):
+   - `*/N` in the hour field (e.g. `0 */4 * * *`) → interval = N hours → TTL = `floor(N * 0.5)`h
+   - List in the hour field (e.g. `0 8,12,18 * * *`) → min gap = smallest difference between consecutive hours → TTL = `floor(min_gap * 0.5)`h
+   - Single hour value with a weekly schedule (one specific day-of-week, e.g. `0 9 * * 1`) → interval = 168h → TTL = `3d`
+   - Single hour value with any other schedule (daily, weekday, every-minute, etc.) → interval = 24h → TTL = `12h`
+   - Always enforce a minimum of `1h` regardless of computed value
+
+   Read the queue file with the Read tool, then:
+   - If the file already has a `reset:` line with a non-auto value (e.g. `reset: on-complete` or any manually set value), **skip this step entirely — do not overwrite it**.
+   - Otherwise, insert or replace `reset: <value>` as the very first line of the YAML (before `cwd:`), then write the file back with the Write tool.
 
 3. **Ensure log dir exists**:
    ```bash

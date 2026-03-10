@@ -79,6 +79,21 @@ mkdir -p ~/.tq/logs
   echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
 ```
 
+**After writing cron lines**, compute and write `reset: <N>h` (or `reset: <N>d`) into the queue YAML as the first top-level key (before `cwd:`).
+
+**Inference rules** (apply the first that matches):
+- `*/N` in the hour field (e.g. `0 */4 * * *`) → interval = N hours → TTL = `floor(N * 0.5)`h
+- List in the hour field (e.g. `0 8,12,18 * * *`) → min gap = smallest difference between consecutive hours → TTL = `floor(min_gap * 0.5)`h
+- Single hour value with a weekly schedule (one specific day-of-week, e.g. `0 9 * * 1`) → interval = 168h → TTL = `3d`
+- Single hour value with any other schedule (daily, weekday, etc.) → interval = 24h → TTL = `12h`
+- Always enforce a minimum of `1h` regardless of computed value
+
+Re-read the queue file you just wrote in Step 4, then:
+- If it already has a `reset:` line (e.g. it was there before this command ran), **skip — do not overwrite it**.
+- Otherwise, prepend `reset: <value>` as the very first line (before `cwd:`), then rewrite the file with the Write tool.
+
+If no schedule was detected in Step 2, skip this reset computation entirely — do not add `reset:` to one-off tasks.
+
 ## Step 6 — Confirm
 
 Show:
