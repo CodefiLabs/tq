@@ -7,10 +7,34 @@ Queue files are YAML files passed to `tq` as the first argument.
 - `cwd` — working directory for all tasks (string, absolute path recommended)
 - `tasks` — array of task objects
 
+## Optional Top-Level Keys
+
+- `schedule` — cron expression for automatic scheduling via `tq-cron-sync` (string)
+- `message` — notification config block (see Queue-Level Messaging below)
+
 ## Task Object Keys
 
 - `prompt` — the Claude prompt to run (string, required)
 - `name` — optional human-readable label for tmux session naming (string)
+
+## Automatic Scheduling
+
+Add `schedule:` with a raw cron expression to have `tq-cron-sync` manage the crontab entry automatically. No manual `crontab -e` needed.
+
+```yaml
+schedule: "0 9 * * *"
+cwd: /Users/kk/Sites/myproject
+tasks:
+  - name: morning-review
+    prompt: "Review yesterday's commits and summarize in docs/daily.md"
+```
+
+`tq-cron-sync` scans `~/.tq/queues/*.yaml` every 20 minutes and syncs crontab:
+- Queues with `schedule:` get a run entry + a `*/30 * * * *` status-check entry
+- Removing `schedule:` or deleting the queue file removes the crontab entries on the next sync
+- Changing `schedule:` updates the crontab entry on the next sync
+
+Use an LLM to translate natural language ("daily at 9am") to cron expressions ("0 9 * * *").
 
 ## Queue-Level Messaging
 
@@ -77,6 +101,6 @@ Each task's identity is derived from `SHA-256(prompt)[:8]`. This means:
 
 ## Do Not
 
-- Do not add extra top-level keys — only `cwd` and `tasks` are processed
+- Do not add top-level keys other than `cwd`, `tasks`, `schedule`, and `message` — others are ignored
 - Do not use YAML anchors — the embedded Python parser does not support them
 - Do not leave `cwd` blank — tasks will run in an undefined directory
