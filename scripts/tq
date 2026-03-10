@@ -138,7 +138,7 @@ os.makedirs(sessions_dir, exist_ok=True)
 
 # Support direct prompt mode: --prompt <text> <state_dir> [cwd]
 if len(sys.argv) > 1 and sys.argv[1] == '--prompt':
-    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '')]
+    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '', '')]
     state_dir = sys.argv[3]
 else:
     queue_file = sys.argv[1]
@@ -159,9 +159,19 @@ else:
 
     # Parse tasks -- handle inline, block literal (|), block folded (>), quoted
     tasks = []
+    current_name = ''
     i = 0
     while i < len(lines):
-        m = re.match(r'^  - prompt:\s*(.*)', lines[i])
+        # Reset name at start of each new list item
+        if re.match(r'^  - ', lines[i]) and not re.match(r'^  - prompt:', lines[i]):
+            current_name = ''
+            m_name = re.match(r'^  - name:\s*(.*)', lines[i])
+            if m_name:
+                current_name = m_name.group(1).strip().strip('"\'')
+            i += 1
+            continue
+
+        m = re.match(r'^(?:  - |    )prompt:\s*(.*)', lines[i])
         if not m:
             i += 1
             continue
@@ -211,9 +221,10 @@ else:
 
         prompt = prompt.strip()
         if prompt:
-            tasks.append((prompt, cwd))
+            tasks.append((prompt, cwd, current_name))
+            current_name = ''
 
-for (prompt, cwd) in tasks:
+for (prompt, cwd, name) in tasks:
     h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
     first_line = prompt.split('\n')[0][:80]
 
@@ -346,7 +357,7 @@ for (prompt, cwd) in tasks:
         f.write('else:\n')
         f.write("    os.execvp('claude', " + claude_args + ")\n")
 
-    print(json.dumps({'hash': h, 'first_line': first_line}))
+    print(json.dumps({'hash': h, 'first_line': first_line, 'name': name}))
 
 PYEOF
 
@@ -376,6 +387,7 @@ fi
 while IFS= read -r JSON_LINE; do
   HASH="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['hash'])" "$JSON_LINE")"
   FIRST_LINE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['first_line'])" "$JSON_LINE")"
+  TASK_NAME_FIELD="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('name', ''))" "$JSON_LINE")"
   STATE_FILE="$STATE_DIR/$HASH"
   LAUNCHER="$STATE_DIR/$HASH.launch.py"
 
@@ -400,11 +412,16 @@ while IFS= read -r JSON_LINE; do
     fi
   fi
 
-  # Generate session/window names from first line of prompt
+  # Generate session/window names: prefer YAML name field, fall back to prompt words
   EPOCH_SUFFIX="$(date +%s | tail -c 6)"
-  SESSION_BASE="$(echo "$FIRST_LINE" | awk '{print $1" "$2" "$3}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+  if [[ -n "$TASK_NAME_FIELD" ]]; then
+    SESSION_BASE="$(echo "$TASK_NAME_FIELD" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+    WINDOW="$(echo "$TASK_NAME_FIELD" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
+  else
+    SESSION_BASE="$(echo "$FIRST_LINE" | awk '{print $1" "$2" "$3}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+    WINDOW="$(echo "$FIRST_LINE" | awk '{print $1" "$2}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
+  fi
   SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
-  WINDOW="$(echo "$FIRST_LINE" | awk '{print $1" "$2}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
 
   # Write state file
   cat > "$STATE_FILE" <<EOF
