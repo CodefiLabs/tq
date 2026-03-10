@@ -105,7 +105,7 @@ fi
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `shellcheck scripts/tq` — no errors
+- [x] `shellcheck scripts/tq` — no errors
 - [ ] Create a test queue with `reset: 24h`, run it to completion, check that the state file contains `completed=<epoch>`
 - [ ] Verify `--status` dead-session flip also writes `completed=`
 
