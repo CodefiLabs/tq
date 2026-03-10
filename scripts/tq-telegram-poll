@@ -124,6 +124,6 @@ while IFS=$'\t' read -r CHAT_ID MSG_ID MSG; do
       -H "Content-Type: application/json" \
       --data-raw "{\"chat_id\":${CHAT_ID},\"message_id\":${MSG_ID},\"reaction\":[{\"type\":\"emoji\",\"emoji\":\"👀\"}]}" \
       > /dev/null 2>&1 || true
-    tq --prompt "$MSG"
+    tq --no-chrome --prompt "$MSG"
   fi
 done <<< "$MESSAGES"

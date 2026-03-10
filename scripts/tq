@@ -10,6 +10,7 @@ PROMPT_TEXT=""
 TASK_NAME="adhoc"
 TASK_CWD=""
 NOTIFY=""
+CHROME=1
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -18,6 +19,7 @@ while [[ $# -gt 0 ]]; do
     --name)   TASK_NAME="${2:-}"; shift 2 ;;
     --cwd)    TASK_CWD="${2:-}"; shift 2 ;;
     --notify) NOTIFY="${2:-}"; shift 2 ;;
+    --no-chrome) CHROME=0; shift ;;
     --) shift; break ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *)  break ;;
@@ -322,23 +324,34 @@ for (prompt, cwd) in tasks:
             f.write('os.environ[' + json.dumps(k) + '] = ' + json.dumps(v) + '\n')
         f.write('if cwd:\n')
         f.write('    os.chdir(cwd)\n')
+        use_chrome = os.environ.get('TQ_CHROME', '1') == '1'
+
         f.write('import shutil, subprocess, time\n')
         f.write('prompt = open(prompt_file).read()\n')
-        f.write('# Open Chrome with Profile 5 (halbotkirchner@gmail.com) before connecting\n')
-        f.write('subprocess.Popen(["open", "-a", "Google Chrome", "--args", "--profile-directory=Profile 5"])\n')
-        f.write('time.sleep(2)\n')
+        if use_chrome:
+            f.write('# Open Chrome with Profile 5 (halbotkirchner@gmail.com) before connecting\n')
+            f.write('subprocess.Popen(["open", "-a", "Google Chrome", "--args", "--profile-directory=Profile 5"])\n')
+            f.write('time.sleep(2)\n')
+
+        # Build claude args
+        claude_args = "['claude', '--settings', settings_file, '--dangerously-skip-permissions'"
+        if use_chrome:
+            claude_args += ", '--chrome'"
+        claude_args += ", prompt]"
+
         f.write('# Use reattach-to-user-namespace if available (macOS tmux keychain fix)\n')
         f.write('reattach = shutil.which("reattach-to-user-namespace")\n')
         f.write('if reattach:\n')
-        f.write("    os.execvp(reattach, [reattach, 'claude', '--settings', settings_file, '--dangerously-skip-permissions', '--chrome', prompt])\n")
+        f.write("    os.execvp(reattach, [reattach, " + claude_args[1:] + ")\n")
         f.write('else:\n')
-        f.write("    os.execvp('claude', ['claude', '--settings', settings_file, '--dangerously-skip-permissions', '--chrome', prompt])\n")
+        f.write("    os.execvp('claude', " + claude_args + ")\n")
 
     print(json.dumps({'hash': h, 'first_line': first_line}))
 
 PYEOF
 
 export TQ_NOTIFY="$NOTIFY"
+export TQ_CHROME="$CHROME"
 
 if [[ "$PROMPT_MODE" == "1" ]]; then
   TASK_CWD="${TASK_CWD:-$HOME/.tq/workspace}"
