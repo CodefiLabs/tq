@@ -296,20 +296,39 @@ deliver() {
   esac
 }
 
-# Summary mode with a live session: ask Claude to generate and send
+# Summary mode with a live session: ask Claude to write summary via slash command
 if [[ "$CONTENT" == "summary" && -n "$SESSION" && -z "$MESSAGE_TEXT" ]]; then
   if tmux has-session -t "$SESSION" 2>/dev/null; then
-    # Pass hash and queue path as arguments to the slash command
+    HANDSHAKE_FILE="/tmp/tq-summary-${TASK_HASH}.txt"
+    rm -f "$HANDSHAKE_FILE"
+
+    # Tell Claude to generate summary (slash command calls tq-message --message which writes handshake file + delivers)
     tmux send-keys -t "$SESSION" "/tq-message ${TASK_HASH} ${QUEUE_FILE}" Enter
-    # Give Claude time to summarize and call back tq-message --message
-    sleep 45
-    # Close the session
-    tmux send-keys -t "$SESSION" "" Enter
-    exit 0
+
+    # Poll for the handshake file (max 90 seconds, check every 3s)
+    WAITED=0
+    while [[ ! -f "$HANDSHAKE_FILE" && "$WAITED" -lt 90 ]]; do
+      sleep 3
+      WAITED=$(( WAITED + 3 ))
+    done
+
+    if [[ -f "$HANDSHAKE_FILE" ]]; then
+      # Slash command already delivered the message — just clean up
+      rm -f "$HANDSHAKE_FILE"
+      exit 0
+    else
+      # Timed out — fall back to details
+      MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
+    fi
   else
     # Session gone — fall back to details
     MESSAGE_TEXT="$(build_message "details" "$TASK_HASH" "$STATE_FILE" "$PROMPT_FILE" "")"
   fi
+fi
+
+# Write handshake file for summary polling (if applicable)
+if [[ -n "$MESSAGE_TEXT" && -n "$TASK_HASH" ]]; then
+  echo "$MESSAGE_TEXT" > "/tmp/tq-summary-${TASK_HASH}.txt"
 fi
 
 # Deliver message if we have one
