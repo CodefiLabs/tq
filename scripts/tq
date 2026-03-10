@@ -398,7 +398,6 @@ while IFS= read -r JSON_LINE; do
   HASH="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['hash'])" "$JSON_LINE")"
   FIRST_LINE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['first_line'])" "$JSON_LINE")"
   TASK_NAME_FIELD="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('name', ''))" "$JSON_LINE")"
-  # shellcheck disable=SC2034  # used in Phase 2 TTL check
   RESET_MODE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('reset', ''))" "$JSON_LINE")"
   STATE_FILE="$STATE_DIR/$HASH"
   LAUNCHER="$STATE_DIR/$HASH.launch.py"
@@ -407,8 +406,33 @@ while IFS= read -r JSON_LINE; do
   if [[ -f "$STATE_FILE" ]]; then
     STATUS="$(grep '^status=' "$STATE_FILE" | cut -d= -f2)"
     if [[ "$STATUS" == "done" ]]; then
-      echo "  [done]    $FIRST_LINE"
-      continue
+      if [[ -n "$RESET_MODE" && "$RESET_MODE" != "on-complete" ]]; then
+        COMPLETED="$(grep '^completed=' "$STATE_FILE" | cut -d= -f2)"
+        NOW="$(date +%s)"
+        TTL_SECONDS="$(python3 -c "
+import sys
+s = sys.argv[1]
+if s.endswith('h'):
+    print(int(s[:-1]) * 3600)
+elif s.endswith('d'):
+    print(int(s[:-1]) * 86400)
+elif s.endswith('m'):
+    print(int(s[:-1]) * 60)
+else:
+    print(0)
+" "$RESET_MODE")"
+        if [[ -n "$COMPLETED" && "$TTL_SECONDS" -gt 0 && $(( NOW - COMPLETED )) -gt "$TTL_SECONDS" ]]; then
+          rm -f "$STATE_FILE"
+          echo "  [reset]   $FIRST_LINE (TTL expired)"
+          # Fall through to spawn logic below
+        else
+          echo "  [done]    $FIRST_LINE"
+          continue
+        fi
+      else
+        echo "  [done]    $FIRST_LINE"
+        continue
+      fi
     fi
     if [[ "$STATUS" == "running" ]]; then
       SESSION="$(grep '^session=' "$STATE_FILE" | cut -d= -f2)"

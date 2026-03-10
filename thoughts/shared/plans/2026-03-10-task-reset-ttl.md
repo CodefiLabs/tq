@@ -165,7 +165,7 @@ else:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `shellcheck scripts/tq` — no errors
+- [x] `shellcheck scripts/tq` — no errors
 - [ ] Manually set `completed=<epoch 25 hours ago>` in a state file with `reset: 24h`; run `bash scripts/tq <queue>` → task shows `[reset]` and re-spawns
 - [ ] Same state file with `completed=<epoch 1 hour ago>` → shows `[done]`, no re-spawn
 
