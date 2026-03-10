@@ -217,7 +217,7 @@ Replace the current unconditional mark-done block with:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `shellcheck scripts/tq` — no errors
+- [x] `shellcheck scripts/tq` — no errors
 - [ ] Create a queue with `reset: on-complete`; spawn a task; manually invoke the generated `on-stop.sh`; confirm state file is deleted
 - [ ] `on-stop.sh` for a queue without `reset:` still writes `status=done` (no regression)
 

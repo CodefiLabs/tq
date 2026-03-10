@@ -274,9 +274,15 @@ for (prompt, cwd, name, reset_mode) in tasks:
     stop_script += 'set -euo pipefail\n'
     stop_script += '# Mark tq task done\n'
     stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
+    stop_script += 'RESET_MODE=' + json.dumps(reset_mode) + '\n'
     stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
-    stop_script += "  sed -i '' 's/^status=running/status=done/' \"$STATE_FILE\"\n"
-    stop_script += '  echo "completed=$(date +%s)" >> "$STATE_FILE"\n'
+    stop_script += '  if [[ "$RESET_MODE" == "on-complete" ]]; then\n'
+    stop_script += '    # on-complete: tq-message runs first, then state is cleared for re-run\n'
+    stop_script += '    : # state deletion happens after tq-message below\n'
+    stop_script += '  else\n'
+    stop_script += "    sed -i '' 's/^status=running/status=done/' \"$STATE_FILE\"\n"
+    stop_script += '    echo "completed=$(date +%s)" >> "$STATE_FILE"\n'
+    stop_script += '  fi\n'
     stop_script += 'fi\n'
     if notify:
         stop_script += '\n# Notification (--notify)\n'
@@ -305,6 +311,10 @@ for (prompt, cwd, name, reset_mode) in tasks:
     stop_script += 'if command -v tq-message &>/dev/null; then\n'
     stop_script += '  SESSION="$(grep \'^session=\' "$STATE_FILE" | cut -d= -f2)"\n'
     stop_script += '  tq-message --task "$TQ_HASH" --queue "$TQ_QUEUE_FILE" --state-file "$STATE_FILE" --session "$SESSION"\n'
+    stop_script += 'fi\n'
+    stop_script += '# on-complete: delete state file so next tq run re-spawns this task\n'
+    stop_script += 'if [[ "$RESET_MODE" == "on-complete" && -f "$STATE_FILE" ]]; then\n'
+    stop_script += '  rm -f "$STATE_FILE"\n'
     stop_script += 'fi\n'
     with open(stop_hook, 'w') as f:
         f.write(stop_script)
