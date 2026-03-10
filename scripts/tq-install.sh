@@ -48,7 +48,7 @@ else
   exit 1
 fi
 
-for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog; do
+for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog tq-cron-sync; do
   SRC="$PLUGIN_ROOT/scripts/$SCRIPT"
   DEST="$INSTALL_DIR/$SCRIPT"
   if [[ -L "$DEST" ]]; then
@@ -63,11 +63,21 @@ done
 
 mkdir -p ~/.tq/queues ~/.tq/logs ~/.tq/config
 
+# Run initial cron sync to pick up any existing queue schedules
+# Use $INSTALL_DIR directly — PATH may not reflect the just-created symlink yet
+"$INSTALL_DIR/tq-cron-sync" --interval 20
+
 echo ""
-echo "tq installed. Crontab example (crontab -e):"
+echo "tq installed. Cron schedules are managed automatically."
 echo ""
-echo "  0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1"
-echo "  */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1"
+echo "Add a schedule: key to any queue file in ~/.tq/queues/ to auto-schedule it:"
+echo ""
+echo "  schedule: \"0 9 * * *\"   # runs daily at 9am"
+echo "  cwd: /path/to/project"
+echo "  tasks: ..."
+echo ""
+echo "tq-cron-sync runs every 20 minutes and syncs all queue schedules to crontab."
+echo "To change the sync interval: tq-cron-sync --interval <minutes>"
 echo ""
 echo "To configure Telegram notifications:"
 echo "  tq-setup"
