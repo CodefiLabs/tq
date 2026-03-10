@@ -165,21 +165,25 @@ build_message() {
   if [[ -f "$state_file" ]]; then
     status="$(grep '^status=' "$state_file" | cut -d= -f2)"
     started="$(grep '^started=' "$state_file" | cut -d= -f2)"
+    completed_epoch="$(grep '^completed=' "$state_file" | cut -d= -f2)"
   else
     status="done"
     started=""
+    completed_epoch=""
   fi
 
-  # Calculate duration in minutes
+  # Calculate duration using completed epoch (avoids timezone skew from ISO string parsing)
   duration=""
   if [[ -n "$started" ]]; then
-    start_epoch="$(python3 -c "import datetime; print(int(datetime.datetime.fromisoformat('${started}').timestamp()))" 2>/dev/null || echo "")"
-    if [[ -n "$start_epoch" ]]; then
-      now_epoch="$(date +%s)"
-      elapsed=$(( now_epoch - start_epoch ))
-      duration="${elapsed}s"
-      if (( elapsed >= 60 )); then
-        duration="$(( elapsed / 60 ))m $(( elapsed % 60 ))s"
+    start_epoch="$(date -j -f "%Y-%m-%dT%H:%M:%S" "${started}" "+%s" 2>/dev/null || echo "")"
+    end_epoch="${completed_epoch:-$(date +%s)}"
+    if [[ -n "$start_epoch" && -n "$end_epoch" ]]; then
+      elapsed=$(( end_epoch - start_epoch ))
+      if (( elapsed > 0 )); then
+        duration="${elapsed}s"
+        if (( elapsed >= 60 )); then
+          duration="$(( elapsed / 60 ))m $(( elapsed % 60 ))s"
+        fi
       fi
     fi
   fi
