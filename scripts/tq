@@ -94,6 +94,7 @@ if [[ "$STATUS_MODE" == "1" ]]; then
     if [[ "$STATUS" == "running" ]]; then
       if ! tmux has-session -t "$SESSION" 2>/dev/null; then
         sed -i '' 's/^status=running/status=done/' "$STATE_FILE"
+        echo "completed=$(date +%s)" >> "$STATE_FILE"
         STATUS="done"
       fi
     fi
@@ -138,7 +139,7 @@ os.makedirs(sessions_dir, exist_ok=True)
 
 # Support direct prompt mode: --prompt <text> <state_dir> [cwd]
 if len(sys.argv) > 1 and sys.argv[1] == '--prompt':
-    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '', '')]
+    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '', '', '')]
     state_dir = sys.argv[3]
 else:
     queue_file = sys.argv[1]
@@ -155,6 +156,14 @@ else:
         m = re.match(r'^cwd:\s*(.+)$', line)
         if m:
             cwd = m.group(1).strip().strip('"\'')
+            break
+
+    # Extract top-level reset policy
+    reset_mode = ''
+    for line in lines:
+        m = re.match(r'^reset:\s*(.+)$', line)
+        if m:
+            reset_mode = m.group(1).strip().strip('"\'')
             break
 
     # Parse tasks -- handle inline, block literal (|), block folded (>), quoted
@@ -221,10 +230,10 @@ else:
 
         prompt = prompt.strip()
         if prompt:
-            tasks.append((prompt, cwd, current_name))
+            tasks.append((prompt, cwd, current_name, reset_mode))
             current_name = ''
 
-for (prompt, cwd, name) in tasks:
+for (prompt, cwd, name, reset_mode) in tasks:
     h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
     first_line = prompt.split('\n')[0][:80]
 
@@ -267,6 +276,7 @@ for (prompt, cwd, name) in tasks:
     stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
     stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
     stop_script += "  sed -i '' 's/^status=running/status=done/' \"$STATE_FILE\"\n"
+    stop_script += '  echo "completed=$(date +%s)" >> "$STATE_FILE"\n'
     stop_script += 'fi\n'
     if notify:
         stop_script += '\n# Notification (--notify)\n'
@@ -357,7 +367,7 @@ for (prompt, cwd, name) in tasks:
         f.write('else:\n')
         f.write("    os.execvp('claude', " + claude_args + ")\n")
 
-    print(json.dumps({'hash': h, 'first_line': first_line, 'name': name}))
+    print(json.dumps({'hash': h, 'first_line': first_line, 'name': name, 'reset': reset_mode}))
 
 PYEOF
 
@@ -388,6 +398,8 @@ while IFS= read -r JSON_LINE; do
   HASH="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['hash'])" "$JSON_LINE")"
   FIRST_LINE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['first_line'])" "$JSON_LINE")"
   TASK_NAME_FIELD="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('name', ''))" "$JSON_LINE")"
+  # shellcheck disable=SC2034  # used in Phase 2 TTL check
+  RESET_MODE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('reset', ''))" "$JSON_LINE")"
   STATE_FILE="$STATE_DIR/$HASH"
   LAUNCHER="$STATE_DIR/$HASH.launch.py"
 
