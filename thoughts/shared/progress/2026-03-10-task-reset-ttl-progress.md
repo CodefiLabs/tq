@@ -37,3 +37,15 @@ All 5 changes from the plan were implemented in `scripts/tq`: (1) Python parser 
 The TTL-based reset logic was added to the dispatch loop in `scripts/tq`. When a task has `status=done` and `RESET_MODE` is a duration string (not blank, not `on-complete`), the code now reads the `completed=` epoch from the state file, converts the duration to seconds via an inline `python3 -c` call (supporting `h`, `d`, `m` suffixes), and compares against `date +%s`. If the TTL has elapsed, the state file is deleted and the loop falls through to spawn logic showing `[reset] (TTL expired)`. If not yet expired — or if `COMPLETED` is missing — it shows `[done]` as before. The `# shellcheck disable=SC2034` comment added in Phase 1 was removed since `RESET_MODE` is now actively used.
 
 ---
+
+## Phase 3
+
+**Completed**: 2026-03-10
+**Status**: COMPLETE
+**Commits**: 26ba1d4
+**Tests**: PASS
+
+### Summary
+Phase 3 implemented the `on-complete` reset mode in the `on-stop.sh` generator. Three changes were made: (1) `RESET_MODE=` is now assigned immediately after `STATE_FILE=` at the top of the stop script; (2) the mark-done block is now conditional — when `RESET_MODE == "on-complete"` it runs a no-op (`:`), deferring action until after tq-message; (3) a cleanup block appended after the tq-message section deletes the state file when `RESET_MODE == "on-complete"`. The tq-message block reads `$STATE_FILE` for the session name before the deletion block runs, so the session name is captured correctly. Shellcheck passes cleanly.
+
+---
