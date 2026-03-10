@@ -22,3 +22,15 @@ status: in_progress
 Created `scripts/tq-cron-sync` (92 lines), a new Bash script that scans `~/.tq/queues/*.yaml` for `schedule:` keys using embedded Python via a temp file, strips all `# tq-managed:` lines from the existing crontab, and rebuilds them fresh on every run. Each scheduled queue gets a run entry (using the queue's own cron expression) and a `*/30 * * * *` status-check entry; a self-watcher entry (`*/20 * * * *` by default, configurable via `--interval`) is always appended. A broken symlink for `tq` at `/opt/homebrew/bin/tq` was fixed to point to `codefi/tq/scripts/tq`. All six smoke test scenarios passed.
 
 ---
+
+## Chunk 2: Update `scripts/tq-install.sh`
+
+**Completed**: 2026-03-10
+**Status**: COMPLETE
+**Commits**: 4dfa43e
+**Tests**: PASS
+
+### Summary
+Updated `scripts/tq-install.sh` with three changes: added `tq-cron-sync` to the symlink loop; inserted a post-install call to `tq-cron-sync --interval 20`; and replaced the old manual crontab example in the output message with new messaging explaining automatic schedule management via the `schedule:` key. Bash syntax check passed.
+
+---
