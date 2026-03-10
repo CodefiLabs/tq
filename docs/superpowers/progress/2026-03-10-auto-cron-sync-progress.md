@@ -1,7 +1,7 @@
 ---
 plan: docs/superpowers/plans/2026-03-10-auto-cron-sync.md
 started: 2026-03-10T00:00:00Z
-status: in_progress
+status: complete
 ---
 
 # Implementation Progress: auto-cron-sync
@@ -32,5 +32,17 @@ Created `scripts/tq-cron-sync` (92 lines), a new Bash script that scans `~/.tq/q
 
 ### Summary
 Updated `scripts/tq-install.sh` with three changes: added `tq-cron-sync` to the symlink loop; inserted a post-install call to `tq-cron-sync --interval 20`; and replaced the old manual crontab example in the output message with new messaging explaining automatic schedule management via the `schedule:` key. Bash syntax check passed.
+
+---
+
+## Chunk 3: Update `.claude/rules/queue-format.md`
+
+**Completed**: 2026-03-10
+**Status**: COMPLETE
+**Commits**: 10b1e16
+**Tests**: PASS
+
+### Summary
+Updated `queue-format.md` with full documentation for the `schedule:` key. Added an "Optional Top-Level Keys" section listing both `schedule` and `message`, inserted a new "Automatic Scheduling" section before "Queue-Level Messaging" with a YAML example and behavioral bullet points explaining sync semantics, and updated the "Do Not" rule to enumerate all four valid top-level keys.
 
 ---
