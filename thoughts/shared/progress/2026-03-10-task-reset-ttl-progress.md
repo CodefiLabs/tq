@@ -49,3 +49,15 @@ The TTL-based reset logic was added to the dispatch loop in `scripts/tq`. When a
 Phase 3 implemented the `on-complete` reset mode in the `on-stop.sh` generator. Three changes were made: (1) `RESET_MODE=` is now assigned immediately after `STATE_FILE=` at the top of the stop script; (2) the mark-done block is now conditional — when `RESET_MODE == "on-complete"` it runs a no-op (`:`), deferring action until after tq-message; (3) a cleanup block appended after the tq-message section deletes the state file when `RESET_MODE == "on-complete"`. The tq-message block reads `$STATE_FILE` for the session name before the deletion block runs, so the session name is captured correctly. Shellcheck passes cleanly.
 
 ---
+
+## Phase 4
+
+**Completed**: 2026-03-10
+**Status**: COMPLETE
+**Commits**: 89c0e50
+**Tests**: PASS
+
+### Summary
+Phase 4 adds automatic `reset:` TTL inference to both the `/schedule` and `/todo` commands. When either command writes a cron schedule to crontab, it now also computes a reset TTL at 50% of the minimum firing interval and inserts `reset: <N>h` (or `reset: 3d` for weekly) as the first line of the queue YAML. Both commands use identical inference rules. Neither command overwrites an existing `reset:` line, and `/todo` skips computation for one-off tasks. The `allowed-tools` list in `schedule.md` was extended to include `Read` and `Write`.
+
+---
