@@ -10,12 +10,35 @@ Queue files are YAML files passed to `tq` as the first argument.
 ## Optional Top-Level Keys
 
 - `schedule` — cron expression for automatic scheduling via `tq-cron-sync` (string)
+- `reset` — when to automatically clear task state so tasks re-run (string, see Reset Modes below)
 - `message` — notification config block (see Queue-Level Messaging below)
 
 ## Task Object Keys
 
 - `prompt` — the Claude prompt to run (string, required)
 - `name` — optional human-readable label for tmux session naming (string)
+
+## Reset Modes
+
+Add `reset:` to control when task state is cleared so tasks re-run automatically.
+
+| Value | Behaviour |
+|-------|-----------|
+| `daily` | Clears all task state once per calendar day (on first run of the day) |
+| `weekly` | Clears once per ISO week (Monday–Sunday) |
+| `hourly` | Clears once per hour |
+| `always` | Clears on every `tq` run |
+| `on-complete` | Per-task: deletes state after each task finishes (task re-runs next time) |
+
+```yaml
+reset: daily
+schedule: "0 9 * * *"
+cwd: /Users/kk/Sites/myproject
+tasks:
+  - prompt: "Summarize yesterday's git activity into docs/daily-standup.md"
+```
+
+Queue-level resets (`daily`, `weekly`, `hourly`, `always`) clear state **before** task evaluation, so all tasks re-run on that run. They also clear `.queue-notified` so the completion notification fires fresh. A `.last_reset` dotfile in the state dir tracks the last reset period.
 
 ## Automatic Scheduling
 
@@ -101,6 +124,6 @@ Each task's identity is derived from `SHA-256(prompt)[:8]`. This means:
 
 ## Do Not
 
-- Do not add top-level keys other than `cwd`, `tasks`, `schedule`, and `message` — others are ignored
+- Do not add top-level keys other than `cwd`, `tasks`, `schedule`, `reset`, and `message` — others are ignored
 - Do not use YAML anchors — the embedded Python parser does not support them
 - Do not leave `cwd` blank — tasks will run in an undefined directory

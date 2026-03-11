@@ -166,6 +166,39 @@ else:
             reset_mode = m.group(1).strip().strip('"\'')
             break
 
+    # Handle queue-level resets before task evaluation.
+    # Clears task state files (and .queue-notified) so tasks re-run.
+    #   daily   — reset once per calendar day
+    #   weekly  — reset once per ISO week (Mon–Sun)
+    #   hourly  — reset once per hour
+    #   always  — reset on every tq run
+    if reset_mode in ('daily', 'weekly', 'hourly', 'always'):
+        import datetime
+        now = datetime.datetime.now()
+        if reset_mode == 'daily':
+            period = now.date().isoformat()       # e.g. '2026-03-11'
+        elif reset_mode == 'weekly':
+            period = now.strftime('%G-W%V')       # e.g. '2026-W11'
+        elif reset_mode == 'hourly':
+            period = now.strftime('%Y-%m-%dT%H')  # e.g. '2026-03-11T17'
+        else:  # always
+            period = None
+        last_reset_file = os.path.join(state_dir, '.last_reset')
+        last_reset = ''
+        if period is not None and os.path.exists(last_reset_file):
+            with open(last_reset_file) as f:
+                last_reset = f.read().strip()
+        if period is None or last_reset != period:
+            for fname in os.listdir(state_dir):
+                fpath = os.path.join(state_dir, fname)
+                if not fname.startswith('.') and '.' not in fname:
+                    os.remove(fpath)           # task state file (bare hash)
+                elif fname == '.queue-notified':
+                    os.remove(fpath)           # clear so completion fires fresh
+            if period is not None:
+                with open(last_reset_file, 'w') as f:
+                    f.write(period)
+
     # Parse tasks -- handle inline, block literal (|), block folded (>), quoted
     tasks = []
     current_name = ''
