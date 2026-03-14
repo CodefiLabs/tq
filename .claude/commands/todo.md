@@ -6,15 +6,19 @@ allowed-tools: Bash(pwd), Bash(cat), Bash(ls), Bash(mkdir), Bash(crontab), Read,
 argument-hint: [task description] [schedule]
 ---
 
+Add task(s) to a tq queue file. Optionally schedule the queue via cron. Accepts natural language like "review auth module every morning" or "add tests to the refactor queue".
+
 Arguments: $ARGUMENTS
 
-## Step 1 — Capture CWD and workspace context
+## Step 1 -- Capture CWD and workspace context
 
 1. Run `pwd` and store as `TASK_CWD`.
-2. Read `~/.tq/workspace-map.md` (fall back to suggesting `/init` if missing).
-3. Use the workspace map to resolve project names in `$ARGUMENTS` (e.g. "fix bug in samson" -> look up samson's path as `TASK_CWD`). Don't block if project is unlisted.
+2. Read `~/.tq/workspace-map.md`. If missing, warn "No workspace map found -- run `/init` to set one up." but continue.
+3. Use the workspace map to resolve project names in `$ARGUMENTS` (e.g. "fix bug in samson" -> look up samson's path as `TASK_CWD`). Continue even if project is unlisted.
 
-## Step 2 — Parse the request
+## Step 2 -- Parse the request
+
+If no arguments provided, list existing queues (`ls ~/.tq/queues/*.yaml 2>/dev/null`) and stop.
 
 From `$ARGUMENTS`, extract:
 - **Task prompt(s)**: the work to do
@@ -25,39 +29,43 @@ Queue name inference (if not explicit):
 - From schedule keyword: "every morning" -> `morning`, "daily" -> `daily`, "weekday" -> `weekday`, "weekly" -> `weekly`, "hourly" -> `hourly`
 - No schedule: use basename of `TASK_CWD`
 
-If no arguments provided, list existing queues: `ls ~/.tq/queues/*.yaml 2>/dev/null`
+## Step 3 -- Read or create queue
 
-## Step 3 — Read existing queue (if any)
+```bash
+mkdir -p ~/.tq/queues
+```
 
-Read `~/.tq/queues/<name>.yaml`. Note if it's a new file.
+Read `~/.tq/queues/<name>.yaml` if it exists. Note whether this is a new or existing file.
 
-## Step 4 — Write the updated queue YAML
+## Step 4 -- Write the updated queue YAML
 
-Merge tasks (never remove existing ones, dedup by exact prompt text). Always include `cwd:` at top.
+Merge tasks into existing queue (never remove existing tasks, dedup by exact prompt text). Always include `cwd:` at top.
 
 Write to `~/.tq/queues/<name>.yaml`. If existing queue has a different `cwd:`, warn the user and ask which to keep before writing.
 
-## Step 5 — Schedule (if detected)
+Format must follow queue-format rules: required keys `cwd` and `tasks`, optional `schedule`, `reset`, `message`.
 
-Translate schedule to cron expression (e.g. "every morning" -> `0 9 * * *`, "every weekday" -> `0 9 * * 1-5`, "nightly" -> `0 22 * * *`).
+## Step 5 -- Schedule (if schedule language detected)
 
-Install cron entries:
+If no schedule language in `$ARGUMENTS`, skip to Step 6.
+
+Translate to cron expression (e.g. "every morning" -> `0 9 * * *`, "every weekday" -> `0 9 * * 1-5`, "nightly" -> `0 22 * * *`).
+
+Install cron entries (match on exact queue filename to avoid clobbering other queues):
 ```bash
 mkdir -p ~/.tq/logs
-(crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
+(crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml"; \
   echo "<cron> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1"; \
   echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
 ```
 
-Compute and add `reset:` TTL to the queue YAML (before `cwd:`), unless one already exists:
-- `*/N` hour interval -> `floor(N * 0.5)`h
-- Hour list (e.g. `8,12,18`) -> `floor(min_gap * 0.5)`h
-- Weekly (specific day-of-week) -> `3d`
-- Daily/weekday/other -> `12h`
-- Minimum: `1h`
+Compute `reset:` TTL using the same rules as `/schedule` (see step 3 there). Insert before `cwd:` unless `reset:` already exists with a named value.
 
-Skip reset computation entirely for unscheduled (one-off) tasks.
+## Step 6 -- Confirm
 
-## Step 6 — Confirm
+Show:
+- Queue file path and full contents
+- `cwd` for task execution
+- Cron schedule in plain English, or "Not scheduled -- run manually with `tq ~/.tq/queues/<name>.yaml`"
 
-Show: queue file path and contents, `cwd` for task execution, cron schedule in plain English (or "not scheduled -- run manually with `tq ~/.tq/queues/<name>.yaml`").
+Related: `/schedule` to change schedule, `/jobs` to list all cron jobs, `/unschedule` to remove schedule.

@@ -3,35 +3,19 @@
 Inspired by [Karpathy's auto-research pattern](https://github.com/karpathy/auto-research).
 Accumulated insights from autonomous skill/command improvement iterations.
 
-## Scoring Rubric (Commands)
+## Scoring Rubrics
 
-Each command is scored 0-10 across these dimensions:
+### Iteration 1 Rubric (0-10 scale)
 
-| Dimension | Weight | Description |
-|-----------|--------|-------------|
-| Frontmatter completeness | 2 | Has name, description, tags, allowed-tools, argument-hint (where applicable) |
-| Description quality | 2 | Clear, actionable, <60 chars, shown well in /help |
-| Instruction clarity | 2 | Written as directives TO Claude, imperative form, clear steps |
-| Tool scoping | 1 | allowed-tools is specific (not overly broad or missing) |
-| Error handling | 1 | Handles missing args, edge cases, invalid input |
-| Consistency | 1 | Follows tq naming conventions, matches other commands' style |
-| Conciseness | 1 | No unnecessary verbosity, no duplicated info from CLAUDE.md |
+Simple dimension-weighted rubric. See git history for original tables.
 
-**Total: 10 points**
+### Iteration 2 Rubric (Vibeathon-style, 0-100 scale)
 
-## Scoring Rubric (Skills)
+Adapted from the AI Judge in [app-vibeathon-us](~/Sites/codefi/app-vibeathon-us).
+Full rubric: [docs/vibeathon-scoring-rubric.md](vibeathon-scoring-rubric.md).
 
-| Dimension | Weight | Description |
-|-----------|--------|-------------|
-| Trigger description | 2 | Third-person, specific trigger phrases, concrete scenarios |
-| Body lean-ness | 2 | Under 2000 words, details in references/ |
-| Writing style | 2 | Imperative/infinitive form, not second person |
-| Progressive disclosure | 1 | Core in SKILL.md, details in references/ |
-| Resource references | 1 | All referenced files exist and are listed |
-| Completeness | 1 | Covers all features and commands |
-| No duplication | 1 | Doesn't repeat CLAUDE.md or reference content |
-
-**Total: 10 points**
+5 weighted criteria evaluated through 3 perspectives (User, LLM, System),
+scored with impact items (+5 to -5), confidence-adjusted hybrid formula.
 
 ## Iteration Log
 
@@ -90,3 +74,49 @@ Each command is scored 0-10 across these dimensions:
 7. **Commands table in SKILL.md must be complete** -- 3 commands (/init, /review, /tq-message) were missing from the skill's reference table, making them effectively invisible.
 8. **Error handling for missing args is cheap insurance** -- Adding "If either argument is missing, stop and report the error" is one line that prevents confusing failures.
 9. **Duplicate content between SKILL.md sections is easy to miss** -- The Telegram Commands table duplicated the main Commands table; removing it eliminated confusion about which was authoritative.
+
+### Iteration 2 — 2026-03-14 (Vibeathon-style scoring)
+
+Applied multi-criteria, multi-perspective scoring adapted from the vibeathon AI judge.
+5 parallel agents scored and improved all 17 files simultaneously.
+
+**Before/After Scores (0-100 weighted composite):**
+
+| File | Before | After | Delta | Top Impact Item |
+|------|--------|-------|-------|-----------------|
+| install.md | 67.9 | 78.0 | +10.1 | +5 Complete 7-binary verification list |
+| review.md | 65.7 | 76.8 | +11.1 | +5 Fixed step ordering (staged check first) |
+| converse.md | 74.1 | 81.3 | +7.2 | +5 Pre-flight check for tq-converse installation |
+| pause.md | 78.2 | 83.6 | +5.4 | +3 Show-before-remove safety step |
+| unschedule.md | 74.2 | 83.2 | +9.0 | +3 Fixed grep pattern preventing prefix collisions |
+| jobs.md | 67.9 | 81.0 | +13.1 | +3 Orphaned cron entry detection |
+| schedule.md | 68.1 | 80.8 | +12.7 | +3 Fixed broken step numbering (was 1,2,2b,3) |
+| todo.md | 67.7 | 80.2 | +12.5 | +3 Eliminated reset TTL duplication via cross-ref |
+| init.md | 73.7 | 78.5 | +4.9 | +2 Directory existence validation |
+| health.md | 73.5 | 82.8 | +9.3 | +5 Conversation mode + workspace config checks |
+| setup-telegram.md | 59.3 | 79.7 | +20.4 | +5 Existing config detection + chmod 600 |
+| tq-message.md | 68.0 | 80.6 | +12.6 | +3 Telegram 3500-char limit + quoting fix |
+| tq-reply.md | 54.2 | 71.0 | +16.8 | +3 Eliminated duplicate placeholder pattern |
+| SKILL.md | 73.1 | 85.0 | +11.9 | +5 Reset modes table + background scripts |
+| cron-expressions.md | 82.1 | 86.6 | +4.5 | +3 Clarified auto vs manual crontab management |
+| session-naming.md | 80.1 | 89.2 | +9.1 | +5 Fixed missing tq- prefix (LLM-critical) |
+| chrome-integration.md | 30.5 | 72.8 | +42.3 | +5 Full rewrite from 4-line stub to reference |
+
+**Average: 68.1 → 80.6 (+12.5 pts, +18% improvement)**
+
+**Score distribution after iteration 2:**
+- 85-90: 2 files (session-naming, cron-expressions) — strong references
+- 80-85: 8 files — solid commands
+- 75-80: 4 files — good with room to grow
+- 70-75: 3 files (init, tq-reply, chrome-integration) — still needs work
+
+**Learnings accumulated (iteration 2):**
+
+10. **Multi-perspective scoring catches different bugs** -- User perspective found discoverability gaps (missing tags), LLM perspective found instruction ambiguity (broken step numbering), System perspective found security violations (missing chmod 600).
+11. **grep patterns across cron-touching commands had a systemic bug** -- `tq.*name.yaml` would match `morning` when searching for `morning-review`. Fixed to `tq.*/name\.yaml` with path separator across unschedule, schedule, and todo.
+12. **Cross-references form navigation rings** -- Adding `Related: /schedule, /jobs, /unschedule` footers to all cron commands created a discoverable loop. Users of any one command can find the others.
+13. **"and stop" after error conditions prevents LLM runaway** -- Without explicit "and stop", Claude may continue past an error (e.g., queue file missing) and attempt later steps anyway.
+14. **Vibeathon confidence adjustment is useful** -- Files with sparse evidence (chrome-integration had only 4 impact items) correctly got pulled toward 50. Files with rich evidence (session-naming had 18 items) got scores that reflected actual quality.
+15. **setup-telegram was the worst-scoring command** -- Security violations (no chmod 600), no overwrite protection on config, and no binary validation. Multi-perspective scoring surfaced all three independently.
+16. **Technical accuracy in references is higher-leverage than prose quality** -- session-naming.md had beautiful formatting but was producing wrong session names (missing tq- prefix). The formatting score didn't help if the content was wrong.
+17. **tq-reply remains the lowest-scoring command** -- Its inline slug detection loop is a code smell that scoring can't fix. Needs a `tq-converse detect-slug` subcommand to simplify.

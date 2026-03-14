@@ -1,36 +1,41 @@
 ---
 name: jobs
-description: List all scheduled tq cron jobs
-tags: tq, cron, schedule, queue
-allowed-tools: Bash(crontab), Bash(tq)
+description: List scheduled tq cron jobs and queue status
+tags: tq, cron, schedule, queue, status
+allowed-tools: Bash(crontab), Bash(tq), Bash(ls)
 argument-hint: [queue-name]
 ---
 
-List all scheduled tq cron jobs. Accept optional natural language filter like "show morning queue jobs" or "what's scheduled for refactor".
+List all scheduled tq cron jobs with their queue status. Accepts optional filter like "show morning jobs" or "what's scheduled for refactor".
 
 Arguments: $ARGUMENTS
 
 ## Steps
 
-1. **Read crontab**:
+1. **Read crontab and filter**:
    ```bash
-   crontab -l 2>/dev/null || echo "(no crontab)"
+   crontab -l 2>/dev/null | grep '/tq ' || true
    ```
+   If no tq lines found, say "No tq cron jobs scheduled." and suggest `/todo <task> every morning` or `/schedule <queue> <time>`. Stop.
 
-2. **Filter tq lines**: Extract only lines containing `/tq`.
+2. **If `$ARGUMENTS` names a specific queue**, filter to lines matching that queue filename only.
 
-3. **For each tq cron line**, display a formatted table with columns:
-   - **Queue** — the queue filename (basename without path)
-   - **Action** — `run` (for `tq <queue>`) or `status-check` (for `tq --status <queue>`)
-   - **Schedule** — the cron expression
-   - **Human** — plain-English description of the schedule (e.g. "daily at 9am", "every 30 min")
-   - **Queue file** — full path
+3. **Display a table** with one row per cron line:
 
-4. **Also show queue state summary** for each unique queue found:
+   | Queue | Action | Schedule | Human | Path |
+   |-------|--------|----------|-------|------|
+   | morning | run | `0 9 * * *` | daily at 9am | `~/.tq/queues/morning.yaml` |
+   | morning | status-check | `*/30 * * * *` | every 30 min | `~/.tq/queues/morning.yaml` |
+
+   - **Action**: `run` for `tq <queue>`, `status-check` for `tq --status <queue>`
+   - **Human**: plain-English translation of the cron expression
+
+4. **Show queue state** for each unique queue found:
    ```bash
    tq --status ~/.tq/queues/<name>.yaml 2>/dev/null
    ```
+   If the queue file no longer exists, warn: "Queue file missing -- cron entry is orphaned. Run `/unschedule <name>` to clean up."
 
-5. **If `$ARGUMENTS` mentions a specific queue**, filter the output to that queue only.
+5. If `$ARGUMENTS` filter matched no queues, say so and list the queue names that do exist.
 
-6. **If no tq jobs found**: Say so and suggest `/todo check something every morning` as an example.
+Related: `/schedule` to add/update, `/unschedule` to remove, `/todo` to create queues.

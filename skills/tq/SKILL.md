@@ -5,11 +5,13 @@ description: >
   "schedule with tq", "tq status", "check task queue", "create a tq queue", "set up cron for tq",
   "run claude in background", "batch prompts in tmux", "start a conversation", "start conversation mode",
   "converse via telegram", "telegram conversation mode", "telegram bot", "message routing",
-  "route a message", "spawn a session", "orchestrator", or wants to manage Claude prompts running
+  "route a message", "spawn a session", "orchestrator", "reset tasks", "reset queue",
+  "notify on completion", "tq notification", "tq health", "check tq health", "tq setup",
+  "setup telegram bot", "tq install", or wants to manage Claude prompts running
   in tmux sessions via the tq CLI tool. Triggers on phrases like "queue", "tq", "task queue",
   "tmux queue", "scheduled claude tasks", "conversation mode", "telegram chat", "converse",
-  "telegram session", "poll telegram", "tq-converse".
-version: 1.2.0
+  "telegram session", "poll telegram", "tq-converse", "tq-message", "task notification".
+version: 1.3.0
 ---
 
 # tq -- Claude Task Queue Runner
@@ -30,22 +32,40 @@ tq manages Claude Code sessions via tmux in two modes:
 Location: `~/.tq/queues/<name>.yaml`
 
 ```yaml
-cwd: /path/to/working/directory   # optional -- where claude runs for each task
+schedule: "0 9 * * *"              # optional -- auto-managed crontab via tq-cron-sync
+reset: daily                        # optional -- daily|weekly|hourly|always|on-complete
+cwd: /path/to/working/directory     # where claude runs for each task
+message:                            # optional -- notification config
+  service: telegram
+  content: summary                  # summary|status|details|log
 tasks:
-  - prompt: fix the login bug in auth service
+  - name: review-auth               # optional -- used for session naming
+    prompt: fix the login bug in auth service
   - prompt: write unit tests for payment module
 ```
 
 Queue files are read-only -- tq never modifies them.
 
+### Reset Modes
+
+Reset controls when task state is cleared so tasks re-run:
+
+| Mode | Behavior |
+|------|----------|
+| `daily` | Clear once per calendar day |
+| `weekly` | Clear once per ISO week |
+| `hourly` | Clear once per hour |
+| `always` | Clear on every `tq` run |
+| `on-complete` | Per-task: delete state after task finishes |
+
 ## State
 
-State dir: `~/.tq/queues/.tq/<queue-basename>/`
+State dir: `<queue-dir>/.tq/<queue-basename>/` (e.g., `~/.tq/queues/.tq/morning/`)
 One file per task, named by 8-char SHA-256 of the prompt:
 
 ```
 status=running
-session=fix-the-login-23451
+session=tq-fix-the-login-451234
 window=fix-the
 prompt=fix the login bug in auth service
 started=2026-03-05T10:00:00
@@ -78,14 +98,18 @@ tq <queue.yaml>           # spawn pending tasks in tmux; skip running/done
 tq --status <queue.yaml>  # print status table; flip dead sessions to done
 ```
 
-## Crontab Pattern
+## Cron Scheduling
+
+Add `schedule:` to any queue YAML and `tq-cron-sync` auto-manages crontab (runs every 20 min, scans `~/.tq/queues/*.yaml`). Each scheduled queue gets two cron lines:
 
 ```cron
-0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+<schedule> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
-The `tq --status` cron runs every 30 min to reap dead sessions and flip their state to `done`.
+The `tq --status` line runs every 30 min to reap dead sessions and flip their state to `done`.
+
+See `references/cron-expressions.md` for natural language to cron mapping.
 
 ## Queue Name Inference
 
@@ -123,8 +147,17 @@ tq-converse status                        # show all session statuses
 tq-converse stop [<slug>]                 # stop session or orchestrator
 ```
 
+## Background Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `tq-cron-sync` | Scans `~/.tq/queues/*.yaml` every 20 min, syncs `schedule:` to crontab |
+| `tq-telegram-poll` | Long-polls Telegram, routes messages via 3-tier routing |
+| `tq-telegram-watchdog` | Ensures poll cron entry exists |
+| `tq-message` | Sends notifications (Telegram/Slack) on task completion |
+
 ## Additional Resources
 
 - **`references/session-naming.md`** -- session/window name generation algorithm and examples
 - **`references/cron-expressions.md`** -- natural language to cron expression mapping table
-- **`references/chrome-integration.md`** -- Chrome profile setup, multiple profiles, and browser display name configuration
+- **`references/chrome-integration.md`** -- Chrome `--chrome` flag, profile setup, and browser configuration

@@ -2,47 +2,63 @@
 
 ## Algorithm
 
-Given a prompt string, derive a tmux session name and window name as follows.
+Given a task, derive a tmux session name and window name. The YAML `name` field takes priority over prompt-derived words.
+
+### Source Text
+
+1. If the task has a `name:` field in the YAML, use that as the full source text
+2. Otherwise, use the first line of the prompt
 
 ### Session Name
 
-1. Take the first 3 words of the prompt
+1. If using `name:` field: take the full field value. If using prompt: take the first 3 words
 2. Lowercase everything
 3. Replace any non-`[a-z0-9]` character with `-`
-4. Strip trailing `-` characters
+4. Strip leading and trailing `-` characters
 5. Truncate to 20 characters
-6. Append `-<epoch-suffix>` (last 6 digits of Unix epoch)
+6. Prepend `tq-` and append `-<epoch-suffix>` (last 6 digits of Unix epoch)
+
+Result: `tq-<base>-<epoch>`
 
 ### Window Name
 
-1. Take the first 2 words of the prompt
-2. Apply the same lowercasing and character replacement as above
-3. Truncate to 15 characters (no epoch suffix)
+1. If using `name:` field: take the full field value. If using prompt: take the first 2 words
+2. Apply the same lowercasing, character replacement, and dash stripping as above
+3. Truncate to 15 characters (no prefix, no epoch suffix)
 
 ## Examples
 
+### Without `name:` field (prompt-derived)
+
 | Prompt | Session | Window |
 |--------|---------|--------|
-| `fix the login bug in auth service` | `fix-the-login-<epoch>` | `fix-the` |
-| `write unit tests for payment module` | `write-unit-tests-<epoch>` | `write-unit` |
-| `Refactor Auth Module` | `refactor-auth-module-<epoch>` | `refactor-auth` |
-| `check LinkedIn saved posts` | `check-linkedin-saved-<epoch>` | `check-linkedin` |
+| `fix the login bug in auth service` | `tq-fix-the-login-451234` | `fix-the` |
+| `write unit tests for payment module` | `tq-write-unit-tests-451234` | `write-unit` |
+| `Refactor Auth Module` | `tq-refactor-auth-module-451234` | `refactor-auth` |
+
+### With `name:` field
+
+| Name Field | Session | Window |
+|------------|---------|--------|
+| `review-auth` | `tq-review-auth-451234` | `review-auth` |
+| `Update Readme` | `tq-update-readme-451234` | `update-readme` |
 
 ## Bash Implementation
 
 ```bash
 EPOCH_SUFFIX="$(date +%s | tail -c 6)"
-SESSION_BASE="$(echo "$PROMPT" | awk '{print $1" "$2" "$3}' \
-  | tr '[:upper:]' '[:lower:]' \
-  | tr -cs 'a-z0-9' '-' \
-  | sed 's/-*$//' \
-  | cut -c1-20)"
-SESSION="${SESSION_BASE}-${EPOCH_SUFFIX}"
-WINDOW="$(echo "$PROMPT" | awk '{print $1" "$2}' \
-  | tr '[:upper:]' '[:lower:]' \
-  | tr -cs 'a-z0-9' '-' \
-  | sed 's/-*$//' \
-  | cut -c1-15)"
+
+# With name field:
+if [[ -n "$TASK_NAME_FIELD" ]]; then
+  SESSION_BASE="$(echo "$TASK_NAME_FIELD" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+  WINDOW="$(echo "$TASK_NAME_FIELD" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
+else
+  # Without name field (prompt-derived):
+  SESSION_BASE="$(echo "$FIRST_LINE" | awk '{print $1" "$2" "$3}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-20)"
+  WINDOW="$(echo "$FIRST_LINE" | awk '{print $1" "$2}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//' | sed 's/-*$//' | cut -c1-15)"
+fi
+
+SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
 ```
 
 ## Notes

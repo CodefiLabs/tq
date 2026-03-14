@@ -2,7 +2,7 @@
 name: init
 description: Configure workspace dirs and catalog projects
 tags: tq, setup, init, workspaces
-allowed-tools: Bash(cat), Bash(find), Bash(ls), Bash(mkdir), Read, Write
+allowed-tools: Bash(cat), Bash(find), Bash(ls), Bash(mkdir), Bash(test), Read, Write
 argument-hint: [workspace-dirs...]
 ---
 
@@ -21,6 +21,8 @@ Read `~/.tq/config/workspaces.yaml`. If it exists, show the current `scan_dirs` 
 - If config exists and no arguments, show current dirs and ask to keep or replace.
 
 Resolve all paths to absolute (expand `~`). Always include `~/.tq/workspace` unless explicitly excluded. Create it with `mkdir -p` if needed.
+
+Validate each directory exists (`test -d`). If a directory does not exist, warn the user and ask whether to create it or skip it.
 
 ## Step 3 — Write workspaces config
 
@@ -49,4 +51,9 @@ Write `~/.tq/workspace-map.md` with a markdown table (columns: project, path, ty
 
 ## Step 6 — Summary
 
-Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories. Remind user to re-run `/init` after adding new projects.
+Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories.
+
+Suggest next steps:
+- Re-run `/init` after adding new projects
+- Run `/install` to ensure tq binaries are on PATH
+- Run `/health` to verify the full system is operational

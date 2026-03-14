@@ -2,30 +2,37 @@
 name: review
 description: Lint and review staged changes before commit
 tags: tq, review, lint, code-quality
-allowed-tools: Bash(shellcheck), Bash(git:*)
+allowed-tools: Bash(shellcheck), Bash(git:*), Bash(ls)
 ---
 
 Review staged changes for correctness, style, and security before committing.
 
-1. Run shellcheck on all bash scripts in `scripts/`:
+1. Check for staged changes first:
    ```bash
-   shellcheck scripts/tq scripts/tq-converse scripts/tq-message scripts/tq-telegram-poll scripts/tq-telegram-watchdog scripts/tq-cron-sync scripts/tq-setup scripts/tq-install.sh
+   git diff --staged --stat
    ```
-   Fix or report any warnings before proceeding.
+   If nothing is staged, report that and stop.
 
-2. Show the staged diff:
+2. Run shellcheck on all bash scripts in `scripts/` (auto-discover, do not hardcode the list):
+   ```bash
+   ls scripts/tq* | xargs shellcheck
+   ```
+   If shellcheck is not installed, warn and skip this step.
+   Report any warnings before proceeding.
+
+3. Show the staged diff:
    ```bash
    git diff --staged
    ```
 
-3. Review the diff against this checklist:
+4. Review the diff against this checklist:
    - Bugs or logic errors in bash/python
-   - macOS compatibility: `sed -i ''` syntax, `security` CLI, tmux commands
-   - Violations of naming, security, or anti-pattern rules in `.claude/rules/` (`anti-patterns.md`, `naming.md`, `security.md`)
+   - macOS compatibility: `sed -i ''` syntax (not GNU `sed -i`), `security` CLI, tmux commands
+   - Violations of rules in `.claude/rules/` (`anti-patterns.md`, `naming.md`, `security.md`)
    - Security: anything that could leak OAuth tokens, commit `.tq/` dirs, or expose credentials
-   - Hash stability: no changes to the `hashlib.sha256` hashing logic
+   - Hash stability: no changes to `hashlib.sha256` hashing logic
    - Shebang correctness: all scripts use `#!/usr/bin/env bash`
+   - Strict mode: all scripts use `set -euo pipefail`
+   - Temp files cleaned via `trap ... EXIT`
 
-4. If no files are staged, report that and stop.
-
-5. Summarize findings as a numbered list. For each issue, state the file, line, and suggested fix.
+5. Summarize findings as a numbered list. For each issue, state the file, line, and suggested fix. If no issues found, confirm the changes look clean.

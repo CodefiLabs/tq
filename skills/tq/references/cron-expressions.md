@@ -13,8 +13,11 @@
 | "every hour" / "hourly" | `0 * * * *` | Top of each hour |
 | "every 4 hours" | `0 */4 * * *` | Every 4 hours |
 | "every 30 minutes" | `*/30 * * * *` | Every 30 min |
+| "every 15 minutes" | `*/15 * * * *` | Every 15 min |
+| "twice daily" / "morning and evening" | `0 9,18 * * *` | 9am and 6pm |
 | "daily" | `0 9 * * *` | Default to 9am |
 | "weekly" | `0 9 * * 1` | Default to Monday 9am |
+| "first of the month" | `0 9 1 * *` | 9am on the 1st |
 
 ## Day-of-Week Numbers
 
@@ -40,7 +43,11 @@ Every scheduled queue gets two cron lines:
 */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
-## Updating Crontab
+## Automatic Crontab Management
+
+`tq-cron-sync` runs every 20 minutes and scans `~/.tq/queues/*.yaml` for `schedule:` keys. It automatically adds, updates, or removes crontab entries. No manual `crontab -e` needed.
+
+### Manual Override (if needed)
 
 Replace existing lines for the same queue by filtering out old entries before appending new ones:
 
