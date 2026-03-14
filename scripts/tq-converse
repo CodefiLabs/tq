@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+CONVERSE_DIR="$HOME/.tq/conversations"
+CONFIG_FILE="$HOME/.tq/config/message.yaml"
+ACTIVE_LINK="$CONVERSE_DIR/active"
+
+usage() {
+  echo "Usage: tq-converse <command> [options]"
+  echo ""
+  echo "Commands:"
+  echo "  start [--cwd <dir>] [--name <name>]   Start a conversation session"
+  echo "  stop                                    Stop the active conversation"
+  echo "  status                                  Show conversation session status"
+  echo "  send <message>                          Send a message to the active conversation"
+  echo ""
+  echo "Manages a persistent Claude Code interactive session for Telegram conversations."
+  exit 1
+}
+
+COMMAND="${1:-}"
+shift || true
+
+case "$COMMAND" in
+  start|stop|status|send) ;;
+  *) usage ;;
+esac
+
+# ---------------------------------------------------------------------------
+# start — launch a persistent conversation session
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "start" ]]; then
+  CONVERSE_CWD="$HOME/.tq/workspace"
+  CONVERSE_NAME="telegram"
+
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --cwd)  CONVERSE_CWD="${2:-}"; shift 2 ;;
+      --name) CONVERSE_NAME="${2:-}"; shift 2 ;;
+      *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  # Check if already running
+  SESSION_NAME="tq-converse-${CONVERSE_NAME}"
+  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "Conversation session '$SESSION_NAME' is already running."
+    echo "Use 'tq-converse stop' to end it, or 'tq-converse send' to send messages."
+    exit 0
+  fi
+
+  # Create conversation directory
+  CONV_ID="$(date +%Y%m%d-%H%M%S)-${CONVERSE_NAME}"
+  CONV_DIR="$CONVERSE_DIR/$CONV_ID"
+  mkdir -p "$CONV_DIR/inbox" "$CONV_DIR/outbox"
+
+  # Write conversation CLAUDE.md into the working directory
+  CLAUDE_MD="$CONVERSE_CWD/CLAUDE.md"
+  CLAUDE_MD_BACKUP=""
+
+  # Back up existing CLAUDE.md if present and not ours
+  if [[ -f "$CLAUDE_MD" ]]; then
+    if ! grep -q 'tq-conversation-mode' "$CLAUDE_MD" 2>/dev/null; then
+      CLAUDE_MD_BACKUP="$CONV_DIR/CLAUDE.md.backup"
+      cp "$CLAUDE_MD" "$CLAUDE_MD_BACKUP"
+    fi
+  fi
+
+  # Write conversation-mode CLAUDE.md
+  mkdir -p "$CONVERSE_CWD"
+  cat > "$CONVERSE_CWD/.tq-converse.md" <<'CONVEOF'
+# tq Conversation Mode <!-- tq-conversation-mode -->
+
+You are in **Telegram conversation mode**. Messages you receive are from a user
+chatting with you via Telegram. Follow these rules:
+
+## Response Protocol
+
+1. Process each message normally — read files, write code, answer questions, etc.
+2. After completing your response, **always** use the `/tq-reply` slash command
+   to send your response back to the user on Telegram.
+3. Keep responses concise — Telegram has a 4096 character limit per message.
+   If your response is longer, summarize the key points for Telegram and note
+   that the full details are in the tmux session.
+
+## Message Format
+
+- Use plain text or basic Markdown (Telegram supports *bold*, _italic_, `code`)
+- Avoid complex formatting, tables, or long code blocks
+- Lead with the answer, not the reasoning
+
+## Important
+
+- Do NOT use /tq-reply for internal tool calls or intermediate work — only for
+  your final response to the user's message.
+- If a task takes time, you can send a brief "working on it" via /tq-reply first,
+  then send the final result when done.
+- The user sees ONLY what you send via /tq-reply. Everything else stays in tmux.
+CONVEOF
+
+  # Write session metadata
+  cat > "$CONV_DIR/session.env" <<EOF
+SESSION_NAME=$SESSION_NAME
+CONVERSE_NAME=$CONVERSE_NAME
+CONVERSE_CWD=$CONVERSE_CWD
+CONV_DIR=$CONV_DIR
+STARTED=$(date -u +%Y-%m-%dT%H:%M:%S)
+EOF
+
+  # Set up active symlink
+  rm -f "$ACTIVE_LINK"
+  ln -sf "$CONV_DIR" "$ACTIVE_LINK"
+
+  # Write per-session settings.json with hooks
+  SESSION_DIR="$CONV_DIR/claude-settings"
+  HOOKS_DIR="$SESSION_DIR/hooks"
+  mkdir -p "$HOOKS_DIR"
+
+  # Notification hook — fires when Claude wants to notify (e.g., permission request)
+  cat > "$HOOKS_DIR/on-notification.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+# Claude Code fires Notification hook with the notification text.
+# Forward it to Telegram so the user knows Claude needs attention.
+NOTIFICATION="${1:-Claude Code notification}"
+
+if command -v tq-message &>/dev/null; then
+  tq-message --message "[notification] $NOTIFICATION"
+fi
+HOOKEOF
+  chmod +x "$HOOKS_DIR/on-notification.sh"
+
+  # Stop hook — notify user the conversation session ended
+  cat > "$HOOKS_DIR/on-stop.sh" <<HOOKEOF
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+# Clean up active symlink if it points to our conversation
+ACTIVE_LINK="$CONVERSE_DIR/active"
+if [[ -L "\$ACTIVE_LINK" ]]; then
+  TARGET="\$(readlink "\$ACTIVE_LINK")"
+  if [[ "\$TARGET" == "$CONV_DIR" ]]; then
+    rm -f "\$ACTIVE_LINK"
+  fi
+fi
+
+if command -v tq-message &>/dev/null; then
+  tq-message --message "Conversation session ended."
+fi
+HOOKEOF
+  chmod +x "$HOOKS_DIR/on-stop.sh"
+
+  SETTINGS_FILE="$SESSION_DIR/settings.json"
+  cat > "$SETTINGS_FILE" <<JSONEOF
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOOKS_DIR/on-stop.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOOKS_DIR/on-notification.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+JSONEOF
+
+  # Capture Claude auth (same pattern as tq main script)
+  AUTH_ENV=""
+  OAUTH_TOKEN=""
+  OAUTH_SCRIPT=$(mktemp /tmp/tq-converse-auth-XXXXXX)
+  trap 'rm -f "$OAUTH_SCRIPT"' EXIT
+
+  cat > "$OAUTH_SCRIPT" <<'PYEOF'
+import sys, os, json, subprocess
+captured = {}
+try:
+    result = subprocess.run(
+        ['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-a', os.environ.get('USER', ''), '-w'],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        creds = json.loads(result.stdout.strip())
+        oauth = creds.get('claudeAiOauth', {})
+        if oauth.get('accessToken'):
+            captured['CLAUDE_CODE_OAUTH_KEY'] = oauth['accessToken']
+except Exception:
+    pass
+for k in ['CLAUDE_CODE_OAUTH_KEY', 'ANTHROPIC_API_KEY']:
+    if k not in captured and k in os.environ:
+        captured[k] = os.environ[k]
+for k, v in captured.items():
+    print(f"{k}={v}")
+PYEOF
+
+  AUTH_ENV="$(python3 "$OAUTH_SCRIPT" 2>/dev/null || true)"
+
+  # Start tmux session
+  tmux start-server
+  tmux new-session -d -s "$SESSION_NAME" -n "converse"
+
+  # Set auth env vars in the tmux session
+  while IFS='=' read -r KEY VAL; do
+    if [[ -n "$KEY" && -n "$VAL" ]]; then
+      tmux send-keys -t "$SESSION_NAME:converse" "export $KEY='$VAL'" Enter
+    fi
+  done <<< "$AUTH_ENV"
+
+  # cd to working directory
+  tmux send-keys -t "$SESSION_NAME:converse" "cd '$CONVERSE_CWD'" Enter
+
+  # Launch Claude Code in interactive mode with our settings
+  # --dangerously-skip-permissions for headless operation
+  # The .tq-converse.md file in the cwd provides conversation instructions
+  tmux send-keys -t "$SESSION_NAME:converse" \
+    "claude --settings '$SETTINGS_FILE' --dangerously-skip-permissions" Enter
+
+  # Wait for Claude to start, then send initial context
+  sleep 3
+  tmux send-keys -t "$SESSION_NAME:converse" \
+    "Read .tq-converse.md and follow those instructions for all future messages. Reply with 'ready' when understood." Enter
+
+  echo "Conversation session started: $SESSION_NAME"
+  echo "  CWD:      $CONVERSE_CWD"
+  echo "  Conv dir: $CONV_DIR"
+  echo "  tmux:     tmux attach -t $SESSION_NAME"
+  echo ""
+  echo "Send messages via: tq-converse send 'your message'"
+  echo "Or via Telegram (tq-telegram-poll will route automatically)."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# stop — end the active conversation session
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "stop" ]]; then
+  if [[ ! -L "$ACTIVE_LINK" ]]; then
+    echo "No active conversation session."
+    exit 0
+  fi
+
+  CONV_DIR="$(readlink "$ACTIVE_LINK")"
+  if [[ ! -f "$CONV_DIR/session.env" ]]; then
+    echo "Active link points to invalid conversation: $CONV_DIR"
+    rm -f "$ACTIVE_LINK"
+    exit 1
+  fi
+
+  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
+
+  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    # Send /exit to Claude Code gracefully
+    tmux send-keys -t "$SESSION_NAME" "/exit" Enter
+    sleep 2
+    # Kill if still alive
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+      tmux kill-session -t "$SESSION_NAME"
+    fi
+    echo "Conversation session '$SESSION_NAME' stopped."
+  else
+    echo "Session '$SESSION_NAME' was not running."
+  fi
+
+  rm -f "$ACTIVE_LINK"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# status — show conversation session info
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "status" ]]; then
+  if [[ ! -L "$ACTIVE_LINK" ]]; then
+    echo "No active conversation session."
+    exit 0
+  fi
+
+  CONV_DIR="$(readlink "$ACTIVE_LINK")"
+  if [[ ! -f "$CONV_DIR/session.env" ]]; then
+    echo "Active link is stale (pointing to $CONV_DIR)."
+    rm -f "$ACTIVE_LINK"
+    exit 0
+  fi
+
+  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
+  CONVERSE_CWD="$(grep '^CONVERSE_CWD=' "$CONV_DIR/session.env" | cut -d= -f2)"
+  STARTED="$(grep '^STARTED=' "$CONV_DIR/session.env" | cut -d= -f2)"
+
+  RUNNING="no"
+  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    RUNNING="yes"
+  else
+    rm -f "$ACTIVE_LINK"
+  fi
+
+  INBOX_COUNT="$(find "$CONV_DIR/inbox" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  OUTBOX_COUNT="$(find "$CONV_DIR/outbox" -type f 2>/dev/null | wc -l | tr -d ' ')"
+
+  echo "Conversation: $SESSION_NAME"
+  echo "  Running:  $RUNNING"
+  echo "  CWD:      $CONVERSE_CWD"
+  echo "  Started:  $STARTED"
+  echo "  Messages: $INBOX_COUNT in / $OUTBOX_COUNT out"
+  echo "  Conv dir: $CONV_DIR"
+  if [[ "$RUNNING" == "yes" ]]; then
+    echo "  Attach:   tmux attach -t $SESSION_NAME"
+  fi
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# send — inject a message into the active conversation
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "send" ]]; then
+  MESSAGE="$*"
+  if [[ -z "$MESSAGE" ]]; then
+    echo "Usage: tq-converse send <message>" >&2
+    exit 1
+  fi
+
+  if [[ ! -L "$ACTIVE_LINK" ]]; then
+    echo "No active conversation session. Start one with: tq-converse start" >&2
+    exit 1
+  fi
+
+  CONV_DIR="$(readlink "$ACTIVE_LINK")"
+  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
+
+  if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "Conversation session '$SESSION_NAME' is not running." >&2
+    rm -f "$ACTIVE_LINK"
+    exit 1
+  fi
+
+  # Log the incoming message
+  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+  echo "$MESSAGE" > "$CONV_DIR/inbox/${TIMESTAMP}.txt"
+
+  # Escape the message for tmux send-keys
+  # Write to a temp file and use tmux load-buffer to avoid quoting issues
+  MSG_TMPFILE=$(mktemp /tmp/tq-converse-msg-XXXXXX)
+  echo "$MESSAGE" > "$MSG_TMPFILE"
+
+  # Use tmux load-buffer + paste-buffer for reliable message injection
+  tmux load-buffer "$MSG_TMPFILE"
+  tmux paste-buffer -t "$SESSION_NAME:converse"
+  # Send Enter to submit the message
+  sleep 0.2
+  tmux send-keys -t "$SESSION_NAME:converse" Enter
+
+  rm -f "$MSG_TMPFILE"
+
+  echo "Message sent to conversation."
+  exit 0
+fi

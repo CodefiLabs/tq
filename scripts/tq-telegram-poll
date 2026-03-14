@@ -113,17 +113,105 @@ PYEOF
 
 MESSAGES="$(python3 "$PROCESS_SCRIPT" "$UPDATES" "$USER_ID" "$OFFSET_FILE")"
 
-# --- Spawn tq --prompt for each message ---
+# --- Detect conversation mode ---
+# If an active conversation session exists, route messages there instead of spawning new tasks
+ACTIVE_LINK="$HOME/.tq/conversations/active"
+CONVERSE_MODE=0
+CONVERSE_SESSION=""
+
+if [[ -L "$ACTIVE_LINK" && -f "$ACTIVE_LINK/session.env" ]]; then
+  CONVERSE_SESSION="$(grep '^SESSION_NAME=' "$ACTIVE_LINK/session.env" | cut -d= -f2)"
+  if tmux has-session -t "$CONVERSE_SESSION" 2>/dev/null; then
+    CONVERSE_MODE=1
+  else
+    # Session died — clean up stale link
+    rm -f "$ACTIVE_LINK"
+  fi
+fi
+
+# --- Handle Telegram commands ---
+# /converse — start a conversation session
+# /stop    — stop the active conversation session
+# /status  — check conversation status
+handle_command() {
+  local cmd="$1"
+  local chat_id="$2"
+
+  case "$cmd" in
+    /converse|/converse\ *)
+      if [[ "$CONVERSE_MODE" == "1" ]]; then
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=Conversation already active: $CONVERSE_SESSION" \
+          > /dev/null 2>&1 || true
+      else
+        # Extract optional --cwd from command
+        CONVERSE_ARGS=""
+        if [[ "$cmd" == /converse\ * ]]; then
+          CONVERSE_ARGS="${cmd#/converse }"
+        fi
+        if command -v tq-converse &>/dev/null; then
+          tq-converse start $CONVERSE_ARGS 2>&1 || true
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${chat_id}" \
+            --data-urlencode "text=Conversation session started. Send messages normally." \
+            > /dev/null 2>&1 || true
+        fi
+      fi
+      return 0
+      ;;
+    /stop)
+      if command -v tq-converse &>/dev/null; then
+        tq-converse stop 2>&1 || true
+        CONVERSE_MODE=0
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=Conversation stopped." \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+    /status)
+      if command -v tq-converse &>/dev/null; then
+        STATUS_TEXT="$(tq-converse status 2>&1 || true)"
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=${STATUS_TEXT}" \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# --- Route messages ---
 mkdir -p "$HOME/.tq/workspace"
 
 while IFS=$'\t' read -r CHAT_ID MSG_ID MSG; do
   if [[ -n "$MSG" ]]; then
-    echo "[tq-telegram-poll] prompt: ${MSG:0:60}"
+    echo "[tq-telegram-poll] message: ${MSG:0:60}"
+
     # React with 👀 to acknowledge receipt
     curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setMessageReaction" \
       -H "Content-Type: application/json" \
       --data-raw "{\"chat_id\":${CHAT_ID},\"message_id\":${MSG_ID},\"reaction\":[{\"type\":\"emoji\",\"emoji\":\"👀\"}]}" \
       > /dev/null 2>&1 || true
-    tq --no-chrome --prompt "$MSG"
+
+    # Check for Telegram commands first
+    if [[ "$MSG" == /* ]]; then
+      if handle_command "$MSG" "$CHAT_ID"; then
+        continue
+      fi
+    fi
+
+    # Route to conversation or spawn one-off task
+    if [[ "$CONVERSE_MODE" == "1" ]]; then
+      echo "[tq-telegram-poll] routing to conversation: $CONVERSE_SESSION"
+      tq-converse send "$MSG"
+    else
+      echo "[tq-telegram-poll] spawning one-off task"
+      tq --no-chrome --prompt "$MSG"
+    fi
   fi
 done <<< "$MESSAGES"

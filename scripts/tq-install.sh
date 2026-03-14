@@ -48,7 +48,7 @@ else
   exit 1
 fi
 
-for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog tq-cron-sync; do
+for SCRIPT in tq tq-message tq-setup tq-telegram-poll tq-telegram-watchdog tq-cron-sync tq-converse; do
   SRC="$PLUGIN_ROOT/scripts/$SCRIPT"
   DEST="$INSTALL_DIR/$SCRIPT"
   if [[ -L "$DEST" ]]; then
@@ -86,3 +86,7 @@ echo "Or from Claude Code: /setup-telegram"
 echo ""
 echo "To relay Telegram messages as tq tasks, add to crontab:"
 echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1"
+echo ""
+echo "Conversation mode (interactive Telegram <-> Claude Code):"
+echo "  tq-converse start [--cwd /path/to/project]"
+echo "  Or send /converse from Telegram"
