@@ -1,90 +1,76 @@
 ---
 name: setup-telegram
-description: Configure Telegram notifications for tq. Guides you through bot token setup and writes ~/.tq/config/message.yaml.
+description: Configure Telegram bot and notifications
 tags: tq, setup, telegram, notify
-allowed-tools: Bash(curl),Bash(mkdir),Bash(cat),Bash(python3),Bash(tq-setup)
+allowed-tools: Bash(curl), Bash(mkdir), Bash(chmod), Bash(cat), Bash(python3), Bash(tq-setup), Bash(command), Read, Write
+argument-hint: [bot-token]
 ---
 
 Arguments: $ARGUMENTS
 
-Help the user configure Telegram notifications for tq interactively.
+Guide the user through Telegram notification setup interactively. If `$ARGUMENTS` contains a bot token, skip step 1.
+
+## Step 0 — Pre-flight checks
+
+1. Verify `tq-message` is installed: `command -v tq-message`. If missing, suggest `/install` and stop.
+2. Check for existing config: `cat ~/.tq/config/message.yaml 2>/dev/null`. If it exists, show current config and ask: "Overwrite existing Telegram config? (y/n)". If no, stop.
 
 ## Step 1 — Get bot token
 
-Tell the user:
-
-> To set up Telegram notifications, you need a bot token from @BotFather.
-> 1. Open Telegram and search for @BotFather
-> 2. Send `/newbot` and follow the prompts
-> 3. Copy the token it gives you (looks like `123456:ABCdef...`)
->
-> Paste your bot token here:
-
-Wait for the user to paste their token.
+Instruct the user to create a bot via @BotFather in Telegram (`/newbot`), then paste the token (format: `123456:ABCdef...`). Wait for input.
 
 ## Step 2 — Discover user ID
 
-Tell the user:
-
-> Now send any message to your new bot in Telegram, then tell me when you've done it.
-
-Once they confirm, run:
-
+Ask the user to send any message to their new bot, then confirm. Run:
 ```bash
 curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates?offset=0&limit=10&timeout=0"
 ```
-
-Parse the response to extract `from.id` from the first message. Tell the user their user ID.
-
-If no message is found, ask them to send a message to the bot and try again.
+Extract `from.id` from the first message result. If no messages found, ask them to send one and retry (up to 3 attempts, then stop with troubleshooting advice).
 
 ## Step 3 — Content type
 
-Ask:
+Ask which notification type to use on task completion:
+- `status` — task name, done/failed, duration (default)
+- `summary` — Claude writes a 2-3 sentence digest (requires live session)
 
-> What type of notification do you want when a tq task finishes?
-> - `status` — task name, done/failed, duration (default, always works)
-> - `summary` — Claude writes a 2-3 sentence digest of what it accomplished (requires live session)
+Default to `status` if unspecified.
 
-Default to `status` if they don't specify or say "default".
+## Step 4 — Test and write config
 
-## Step 4 — Write config and test
+1. Send a test message via the Telegram API:
+   ```bash
+   curl -s -X POST "https://api.telegram.org/bot<TOKEN>/sendMessage" \
+     -d chat_id="<USER_ID>" -d text="tq setup test — notifications working"
+   ```
+   If it fails, report the error and stop.
 
-Send a test message:
+2. Create directories and write config:
+   ```bash
+   mkdir -p ~/.tq/config ~/.tq/workspace ~/.tq/logs
+   ```
 
-```bash
-curl -s -X POST \
-  "https://api.telegram.org/bot<TOKEN>/sendMessage" \
-  -d "chat_id=<USER_ID>" \
-  --data-urlencode "text=tq is configured. Notifications are working." \
-  -d "parse_mode=Markdown"
+3. Write `~/.tq/config/message.yaml`:
+   ```yaml
+   default_service: telegram
+   content: <CONTENT_TYPE>
+
+   telegram:
+     bot_token: "<TOKEN>"
+     user_id: "<USER_ID>"
+   ```
+
+4. Set restrictive permissions (file contains bot token):
+   ```bash
+   chmod 600 ~/.tq/config/message.yaml
+   ```
+
+## Step 5 — Polling setup
+
+Tell the user to add the polling cron entry for receiving Telegram messages:
+```
+* * * * * $(command -v tq-telegram-poll) >> ~/.tq/logs/tq-telegram.log 2>&1
 ```
 
-If it fails, report the error and stop.
+Confirm config path: `~/.tq/config/message.yaml`
 
-If it succeeds, write the config:
-
-```bash
-mkdir -p ~/.tq ~/.tq/workspace ~/.tq/logs
-cat > ~/.tq/config/message.yaml <<EOF
-default_service: telegram
-content: <CONTENT_TYPE>
-
-telegram:
-  bot_token: "<TOKEN>"
-  user_id: "<USER_ID>"
-EOF
-```
-
-## Step 5 — Final instructions
-
-Tell the user:
-
-> Config written to ~/.tq/config/message.yaml.
->
-> To receive your Telegram messages as tq tasks, add this to your crontab (`crontab -e`):
-> ```
-> * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
-> ```
->
-> tq will now notify you via Telegram when tasks complete.
+Related: `/converse`, `/tq-reply`, `/health`

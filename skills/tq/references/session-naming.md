@@ -2,29 +2,32 @@
 
 ## Algorithm
 
-Given a prompt string, derive a tmux session name and window name as follows:
+Given a prompt string, derive a tmux session name and window name as follows.
 
 ### Session Name
+
 1. Take the first 3 words of the prompt
 2. Lowercase everything
 3. Replace any non-`[a-z0-9]` character with `-`
 4. Strip trailing `-` characters
 5. Truncate to 20 characters
-6. Append `-<epoch-suffix>` (last 6 digits of Unix epoch)
+6. Prepend `tq-` prefix
+7. Append `-<epoch-suffix>` (last 6 digits of Unix epoch)
 
 ### Window Name
+
 1. Take the first 2 words of the prompt
-2. Same lowercasing and character replacement as above
+2. Apply the same lowercasing and character replacement as above
 3. Truncate to 15 characters (no epoch suffix)
 
 ## Examples
 
 | Prompt | Session | Window |
 |--------|---------|--------|
-| `fix the login bug in auth service` | `fix-the-login-<epoch>` | `fix-the` |
-| `write unit tests for payment module` | `write-unit-tests-<epoch>` | `write-unit` |
-| `Refactor Auth Module` | `refactor-auth-module-<epoch>` | `refactor-auth` |
-| `check LinkedIn saved posts` | `check-linkedin-saved-<epoch>` | `check-linkedin` |
+| `fix the login bug in auth service` | `tq-fix-the-login-<epoch>` | `fix-the` |
+| `write unit tests for payment module` | `tq-write-unit-tests-<epoch>` | `write-unit` |
+| `Refactor Auth Module` | `tq-refactor-auth-module-<epoch>` | `refactor-auth` |
+| `check LinkedIn saved posts` | `tq-check-linkedin-saved-<epoch>` | `check-linkedin` |
 
 ## Bash Implementation
 
@@ -35,7 +38,7 @@ SESSION_BASE="$(echo "$PROMPT" | awk '{print $1" "$2" "$3}' \
   | tr -cs 'a-z0-9' '-' \
   | sed 's/-*$//' \
   | cut -c1-20)"
-SESSION="${SESSION_BASE}-${EPOCH_SUFFIX}"
+SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
 WINDOW="$(echo "$PROMPT" | awk '{print $1" "$2}' \
   | tr '[:upper:]' '[:lower:]' \
   | tr -cs 'a-z0-9' '-' \
@@ -45,13 +48,13 @@ WINDOW="$(echo "$PROMPT" | awk '{print $1" "$2}' \
 
 ## Notes
 
-- Epoch suffix prevents collision when the same prompt is re-queued after a reset
-- tmux session names must not contain `.` or `:` — the character replacement handles this
-- The `-` separator between base and epoch is always present; if the base ends with `-`, it gets stripped first to avoid `--`
+- The epoch suffix prevents collision when the same prompt is re-queued after a reset
+- tmux session names must not contain `.` or `:` -- the character replacement handles this
+- The `-` separator between base and epoch is always present; if the base ends with `-`, strip it first to avoid `--`
 
 ## Conversation Mode Session Names
 
-Conversation sessions use a different naming scheme — slug-based, no epoch suffix:
+Conversation sessions use a slug-based naming scheme with no epoch suffix:
 
 | Type | Pattern | Example |
 |------|---------|---------|
@@ -59,8 +62,6 @@ Conversation sessions use a different naming scheme — slug-based, no epoch suf
 | Child session | `tq-conv-<slug>` | `tq-conv-fix-auth` |
 | Child window | `<slug>` | `fix-auth` |
 
-Slugs are short kebab-case names (2-4 words) chosen by the orchestrator Claude when a
-new conversation is created. Examples: `fix-auth-bug`, `refactor-api`, `update-docs`.
+Slugs are short kebab-case names (2-4 words) chosen by the orchestrator Claude when creating a new conversation. Examples: `fix-auth-bug`, `refactor-api`, `update-docs`.
 
-Since there is no epoch suffix, conversation session names are unique by slug. Starting
-a session with an already-active slug will reuse the existing session.
+Since there is no epoch suffix, conversation session names are unique by slug. Starting a session with an already-active slug reuses the existing session.

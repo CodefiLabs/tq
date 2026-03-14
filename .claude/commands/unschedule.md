@@ -1,11 +1,12 @@
 ---
 name: unschedule
-description: Fully remove all cron lines for a tq queue (both run and status-check). Accepts natural language like "unschedule the weekday queue" or "remove morning from cron".
+description: Remove all cron lines for a tq queue
 tags: tq, cron, schedule, queue
 allowed-tools: Bash(crontab)
+argument-hint: [queue-name]
 ---
 
-You are a cron schedule manager for the `tq` CLI tool.
+Fully remove all cron lines for a tq queue (both run and status-check). Accept natural language like "unschedule the weekday queue" or "remove morning from cron".
 
 Arguments: $ARGUMENTS
 
@@ -22,10 +23,15 @@ Arguments: $ARGUMENTS
 3. **Find all tq lines** for this queue (both `tq` run and `tq --status`).
    If none found, say "No cron schedule found for `<name>` queue."
 
-4. **Remove all lines** referencing this queue:
-   ```bash
-   (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml") | crontab -
-   ```
+4. **Show lines to be removed** before modifying crontab.
 
-5. **Confirm**: Show what was removed. Note that the queue file and task state are untouched —
+5. **Remove all lines** referencing this queue:
+   ```bash
+   (crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml") | crontab -
+   ```
+   Use `/<name>\.yaml` (escaped dot, path separator) to avoid matching `morning-review` when unscheduling `morning`.
+
+6. **Confirm**: Show what was removed. Note that the queue file and task state are untouched —
    only the cron schedule was removed. Suggest `/schedule <name>` to reschedule.
+
+Related: `/schedule`, `/pause`, `/jobs`

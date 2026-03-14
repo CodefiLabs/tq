@@ -1,72 +1,68 @@
 ---
 name: health
-description: System-wide health check for tq. Verifies binaries, cron jobs, queue states, and log errors. No arguments needed, or say "check morning queue" to focus on one.
+description: Verify tq binaries, cron, queues, and logs
 tags: tq, health, status, diagnostics
-allowed-tools: Bash(ls), Bash(which), Bash(crontab), Bash(tmux), Bash(tail), Bash(tq)
+allowed-tools: Bash(ls), Bash(command), Bash(crontab), Bash(tmux), Bash(tail), Bash(tq), Bash(cat), Bash(grep)
+argument-hint: [queue-name]
 ---
-
-You are a diagnostic assistant for the `tq` task queue system.
 
 Arguments: $ARGUMENTS
 
-## Steps
+Run all checks below, then summarize with a pass/warn/fail status for each. If `$ARGUMENTS` names a specific queue, focus checks 3-6 on that queue only.
 
-Run all checks, then summarize with a pass/warn/fail status for each.
+## 1. Binary check
 
-### 1. Binary check
-```bash
-ls -la /opt/homebrew/bin/tq 2>&1
-which tq 2>&1
-```
-Pass: exists and is executable. Fail: missing — suggest running `/install`.
+Check all 7 binaries: `tq`, `tq-converse`, `tq-message`, `tq-telegram-poll`, `tq-telegram-watchdog`, `tq-cron-sync`, `tq-setup`.
 
-### 2. Cron jobs check
 ```bash
-crontab -l 2>/dev/null | grep tq || echo "(no tq cron jobs)"
+for bin in tq tq-converse tq-message tq-telegram-poll tq-telegram-watchdog tq-cron-sync tq-setup; do
+  command -v "$bin" >/dev/null 2>&1 && echo "pass: $bin" || echo "FAIL: $bin"
+done
 ```
-Warn if no cron jobs found (tq is only useful when scheduled or run manually).
 
-### 3. Queue inventory
-```bash
-ls ~/.tq/queues/*.yaml 2>/dev/null || echo "(no queues)"
-```
-For each queue found, run:
-```bash
-tq --status ~/.tq/queues/<name>.yaml 2>/dev/null
-```
-Summarize per queue: total tasks, how many done/running/pending.
-Warn if any queue has 0 tasks or only pending tasks with no cron schedule.
+Fail: suggest `/install`.
 
-### 4. Zombie session check
-For any task showing `status=running` in state files, verify the tmux session is alive:
-```bash
-tmux has-session -t "<session>" 2>&1
-```
-Flag any running-state tasks whose session is dead (these should have been caught by `tq --status` but weren't).
+## 2. Cron jobs check
 
-### 5. Log check
+Run `crontab -l 2>/dev/null | grep tq`. Warn if no tq cron jobs found. Check for orphaned entries referencing missing queue files.
+
+## 3. Queue inventory
+
+List `~/.tq/queues/*.yaml`. For each queue, run `tq --status ~/.tq/queues/<name>.yaml` and summarize: total tasks, done/running/pending counts. Warn if any queue has 0 tasks or only pending tasks with no cron schedule.
+
+## 4. Zombie session check
+
+For any task with `status=running` in state files, verify the tmux session is alive with `tmux has-session -t "<session>"`. Flag running-state tasks whose session is dead.
+
+## 5. Conversation mode check
+
+Check if the orchestrator is running: `tmux has-session -t tq-orchestrator 2>/dev/null`. List active conversation sessions: `ls ~/.tq/conversations/sessions/*/current-slug 2>/dev/null`. Warn if registry is stale (sessions in registry but tmux sessions dead).
+
+## 6. Config check
+
+Verify workspace config exists: `~/.tq/config/workspaces.yaml`. Check messaging config: `~/.tq/config/message.yaml`. Warn if messaging config has insecure permissions:
 ```bash
-tail -50 ~/.tq/logs/tq.log 2>/dev/null || echo "(no log file)"
+stat -f '%Lp' ~/.tq/config/message.yaml 2>/dev/null
 ```
-Scan for lines containing `error`, `Error`, `failed`, or `Exit code` and surface them.
-Warn if log file doesn't exist and cron jobs are configured (logging may be broken).
+Should be `600`. Warn if more permissive.
+
+## 7. Log check
+
+Run `tail -50 ~/.tq/logs/tq.log`. Surface lines containing `error`, `Error`, `failed`, or `Exit code`. Warn if log file is missing but cron jobs are configured. Also check `~/.tq/logs/tq-telegram.log` if Telegram is configured.
 
 ## Output format
-
-Print a summary table:
 
 ```
 SYSTEM CHECK          STATUS   NOTES
 --------------------  -------  ----------------------------------------
-tq binary             pass     /opt/homebrew/bin/tq
-cron jobs             pass     2 jobs registered
+tq binaries           pass     7/7 found in PATH
+cron jobs             pass     2 run + 2 status-check entries
 queues found          pass     3 queues (morning, refactor, cleanup)
 morning queue         pass     5 done, 0 running, 0 pending
-refactor queue        warn     0 done, 0 running, 2 pending — never run?
 zombie sessions       pass     none
-recent log errors     pass     no errors in last 50 lines
+conversation mode     pass     orchestrator running, 2 active sessions
+config files          pass     workspaces + messaging configured
+recent log errors     warn     1 error in last 50 lines
 ```
 
-Then show per-queue `tq --status` output beneath.
-
-If `$ARGUMENTS` mentions a specific queue, focus checks 3-5 on that queue only.
+Related: `/jobs`, `/install`

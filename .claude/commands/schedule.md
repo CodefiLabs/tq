@@ -1,11 +1,12 @@
 ---
 name: schedule
-description: Add or update a cron schedule for a tq queue. Accepts natural language like "run the morning queue every day at 9am" or "schedule refactor queue every weekday at 6pm".
+description: Add or update cron schedule for a tq queue
 tags: tq, cron, schedule, queue
-allowed-tools: Bash(ls), Bash(mkdir), Bash(crontab), Read, Write
+allowed-tools: Bash(ls), Bash(mkdir), Bash(crontab), Bash(command), Read, Write
+argument-hint: [queue-name] [schedule]
 ---
 
-You are a cron schedule manager for the `tq` CLI tool.
+Add or update a cron schedule for a tq queue. Accept natural language like "run the morning queue every day at 9am" or "schedule refactor queue every weekday at 6pm".
 
 Arguments: $ARGUMENTS
 
@@ -28,40 +29,41 @@ Arguments: $ARGUMENTS
    ```
    If missing, suggest running `/todo <name>` first.
 
-2b. **Compute and write `reset:` TTL**:
+3. **Compute and write `reset:` TTL**:
 
-   Given the cron expression from step 1, determine the minimum interval between consecutive runs and write `reset: <N>h` (or `reset: <N>d`) into the queue YAML as the first top-level key (before `cwd:`).
+   Determine the minimum interval between consecutive cron runs. Write `reset: <N>h` (or `<N>d`) as the first top-level key in the queue YAML (before `cwd:`).
 
-   **Inference rules** (apply the first that matches):
-   - `*/N` in the hour field (e.g. `0 */4 * * *`) → interval = N hours → TTL = `floor(N * 0.5)`h
-   - List in the hour field (e.g. `0 8,12,18 * * *`) → min gap = smallest difference between consecutive hours → TTL = `floor(min_gap * 0.5)`h
-   - Single hour value with a weekly schedule (one specific day-of-week, e.g. `0 9 * * 1`) → interval = 168h → TTL = `3d`
-   - Single hour value with any other schedule (daily, weekday, every-minute, etc.) → interval = 24h → TTL = `12h`
-   - Always enforce a minimum of `1h` regardless of computed value
+   **Inference rules** (first match wins):
+   | Cron pattern | Interval | TTL |
+   |---|---|---|
+   | `*/N` in hour field | N hours | `floor(N * 0.5)`h |
+   | Comma-list in hour field | smallest gap between hours | `floor(min_gap * 0.5)`h |
+   | Single hour, one day-of-week | 168h | `3d` |
+   | Single hour, any other | 24h | `12h` |
 
-   Read the queue file with the Read tool, then:
-   - If the file already has a `reset:` line with a non-auto value (e.g. `reset: on-complete` or any manually set value), **skip this step entirely — do not overwrite it**.
-   - Otherwise, insert or replace `reset: <value>` as the very first line of the YAML (before `cwd:`), then write the file back with the Write tool.
+   Minimum: `1h`. Read the queue file first. If `reset:` already has a non-auto value (e.g. `on-complete`), skip this step entirely. Otherwise insert or replace `reset:` before `cwd:`.
 
-3. **Ensure log dir exists**:
+4. **Ensure log dir exists**:
    ```bash
    mkdir -p ~/.tq/logs
    ```
 
-4. **Read current crontab**:
+5. **Read current crontab**:
    ```bash
    crontab -l 2>/dev/null || echo ""
    ```
 
-5. **Build the two cron lines** for this queue:
+6. **Build the two cron lines** for this queue (use `$(command -v tq)` to resolve the installed path):
    ```
-   <cron-expression> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
-   */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+   <cron-expression> $(command -v tq) ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+   */30 * * * * $(command -v tq) --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
    ```
 
-6. **Merge into crontab**:
+7. **Merge into crontab**:
    - Remove any existing lines referencing `tq` and this queue name
    - Append the two new lines
-   - Write back with: `(crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; echo "<line1>"; echo "<line2>") | crontab -`
+   - Write back with: `(crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml"; echo "<line1>"; echo "<line2>") | crontab -`
 
-7. **Confirm**: Show the updated crontab lines for this queue and what they do.
+8. **Confirm**: Show the updated crontab lines for this queue and what they do.
+
+Related: `/pause`, `/unschedule`, `/jobs`
