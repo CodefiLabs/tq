@@ -4,158 +4,208 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 CONVERSE_DIR="$HOME/.tq/conversations"
-CONFIG_FILE="$HOME/.tq/config/message.yaml"
-ACTIVE_LINK="$CONVERSE_DIR/active"
+REGISTRY="$CONVERSE_DIR/registry.json"
+ORCHESTRATOR_SESSION="tq-orchestrator"
 
-usage() {
-  echo "Usage: tq-converse <command> [options]"
-  echo ""
-  echo "Commands:"
-  echo "  start [--cwd <dir>] [--name <name>]   Start a conversation session"
-  echo "  stop                                    Stop the active conversation"
-  echo "  status                                  Show conversation session status"
-  echo "  send <message>                          Send a message to the active conversation"
-  echo ""
-  echo "Manages a persistent Claude Code interactive session for Telegram conversations."
-  exit 1
+mkdir -p "$CONVERSE_DIR"
+
+# ---------------------------------------------------------------------------
+# Registry helpers (embedded Python for JSON manipulation)
+# ---------------------------------------------------------------------------
+ensure_registry() {
+  if [[ ! -f "$REGISTRY" ]]; then
+    echo '{"sessions":{},"messages":{}}' > "$REGISTRY"
+  fi
 }
 
-COMMAND="${1:-}"
-shift || true
+registry_op() {
+  ensure_registry
+  local OP="$1"; shift
+  REGISTRY_SCRIPT=$(mktemp /tmp/tq-registry-XXXXXX)
+  trap 'rm -f "$REGISTRY_SCRIPT"' EXIT
 
-case "$COMMAND" in
-  start|stop|status|send) ;;
-  *) usage ;;
-esac
+  cat > "$REGISTRY_SCRIPT" <<'PYEOF'
+import sys, os, json
+
+registry_path = sys.argv[1]
+op = sys.argv[2]
+
+with open(registry_path) as f:
+    reg = json.load(f)
+
+sessions = reg.setdefault('sessions', {})
+messages = reg.setdefault('messages', {})
+
+def save():
+    with open(registry_path, 'w') as f:
+        json.dump(reg, f, indent=2)
+
+if op == 'list':
+    for slug, info in sessions.items():
+        status = info.get('status', 'unknown')
+        desc = info.get('description', '')[:60]
+        tmux = info.get('tmux', '')
+        print(f"{slug}\t{status}\t{tmux}\t{desc}")
+
+elif op == 'get':
+    slug = sys.argv[3]
+    if slug in sessions:
+        print(json.dumps(sessions[slug]))
+    else:
+        sys.exit(1)
+
+elif op == 'set':
+    slug = sys.argv[3]
+    data = json.loads(sys.argv[4])
+    sessions[slug] = data
+    save()
+
+elif op == 'update-field':
+    slug = sys.argv[3]
+    field = sys.argv[4]
+    value = sys.argv[5]
+    if slug in sessions:
+        sessions[slug][field] = value
+        save()
+
+elif op == 'remove':
+    slug = sys.argv[3]
+    sessions.pop(slug, None)
+    # Clean up message mappings for this slug
+    messages_to_remove = [mid for mid, s in messages.items() if s == slug]
+    for mid in messages_to_remove:
+        del messages[mid]
+    save()
+
+elif op == 'track-msg':
+    slug = sys.argv[3]
+    msg_id = sys.argv[4]
+    messages[msg_id] = slug
+    save()
+
+elif op == 'lookup-msg':
+    msg_id = sys.argv[3]
+    slug = messages.get(msg_id, '')
+    if slug:
+        print(slug)
+    else:
+        sys.exit(1)
+
+elif op == 'dump':
+    print(json.dumps(reg, indent=2))
+
+elif op == 'slugs':
+    for slug in sessions:
+        print(slug)
+
+elif op == 'active-slugs':
+    for slug, info in sessions.items():
+        if info.get('status') == 'active':
+            print(slug)
+
+elif op == 'summary':
+    # Output slug\tdescription for all active sessions (for orchestrator context)
+    for slug, info in sessions.items():
+        if info.get('status') == 'active':
+            desc = info.get('description', '(no description)')
+            cwd = info.get('cwd', '')
+            print(f"{slug}\t{desc}\t{cwd}")
+
+PYEOF
+
+  python3 "$REGISTRY_SCRIPT" "$REGISTRY" "$OP" "$@"
+}
 
 # ---------------------------------------------------------------------------
-# start — launch a persistent conversation session
+# Auth capture (shared by orchestrator and child sessions)
 # ---------------------------------------------------------------------------
-if [[ "$COMMAND" == "start" ]]; then
-  CONVERSE_CWD="$HOME/.tq/workspace"
-  CONVERSE_NAME="telegram"
+capture_auth() {
+  local AUTH_SCRIPT
+  AUTH_SCRIPT=$(mktemp /tmp/tq-auth-XXXXXX)
 
-  while [[ $# -gt 0 ]]; do
-    case "${1:-}" in
-      --cwd)  CONVERSE_CWD="${2:-}"; shift 2 ;;
-      --name) CONVERSE_NAME="${2:-}"; shift 2 ;;
-      *) echo "Unknown option: $1" >&2; exit 1 ;;
-    esac
-  done
+  cat > "$AUTH_SCRIPT" <<'PYEOF'
+import sys, os, json, subprocess
+captured = {}
+try:
+    result = subprocess.run(
+        ['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-a', os.environ.get('USER', ''), '-w'],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        creds = json.loads(result.stdout.strip())
+        oauth = creds.get('claudeAiOauth', {})
+        if oauth.get('accessToken'):
+            captured['CLAUDE_CODE_OAUTH_KEY'] = oauth['accessToken']
+except Exception:
+    pass
+for k in ['CLAUDE_CODE_OAUTH_KEY', 'ANTHROPIC_API_KEY']:
+    if k not in captured and k in os.environ:
+        captured[k] = os.environ[k]
+for k, v in captured.items():
+    print(f"{k}={v}")
+PYEOF
 
-  # Check if already running
-  SESSION_NAME="tq-converse-${CONVERSE_NAME}"
-  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "Conversation session '$SESSION_NAME' is already running."
-    echo "Use 'tq-converse stop' to end it, or 'tq-converse send' to send messages."
-    exit 0
-  fi
+  python3 "$AUTH_SCRIPT" 2>/dev/null || true
+  rm -f "$AUTH_SCRIPT"
+}
 
-  # Create conversation directory
-  CONV_ID="$(date +%Y%m%d-%H%M%S)-${CONVERSE_NAME}"
-  CONV_DIR="$CONVERSE_DIR/$CONV_ID"
-  mkdir -p "$CONV_DIR/inbox" "$CONV_DIR/outbox"
-
-  # Write conversation CLAUDE.md into the working directory
-  CLAUDE_MD="$CONVERSE_CWD/CLAUDE.md"
-  CLAUDE_MD_BACKUP=""
-
-  # Back up existing CLAUDE.md if present and not ours
-  if [[ -f "$CLAUDE_MD" ]]; then
-    if ! grep -q 'tq-conversation-mode' "$CLAUDE_MD" 2>/dev/null; then
-      CLAUDE_MD_BACKUP="$CONV_DIR/CLAUDE.md.backup"
-      cp "$CLAUDE_MD" "$CLAUDE_MD_BACKUP"
+# Inject auth env vars into a tmux session:window
+inject_auth() {
+  local TARGET="$1"
+  local AUTH_ENV
+  AUTH_ENV="$(capture_auth)"
+  while IFS='=' read -r KEY VAL; do
+    if [[ -n "$KEY" && -n "$VAL" ]]; then
+      tmux send-keys -t "$TARGET" "export $KEY='$VAL'" Enter
     fi
-  fi
+  done <<< "$AUTH_ENV"
+}
 
-  # Write conversation-mode CLAUDE.md
-  mkdir -p "$CONVERSE_CWD"
-  cat > "$CONVERSE_CWD/.tq-converse.md" <<'CONVEOF'
-# tq Conversation Mode <!-- tq-conversation-mode -->
+# ---------------------------------------------------------------------------
+# Write settings.json with hooks for a session
+# ---------------------------------------------------------------------------
+write_session_settings() {
+  local HOOKS_DIR="$1"
+  local SETTINGS_FILE="$2"
+  local SLUG="${3:-}"
 
-You are in **Telegram conversation mode**. Messages you receive are from a user
-chatting with you via Telegram. Follow these rules:
-
-## Response Protocol
-
-1. Process each message normally — read files, write code, answer questions, etc.
-2. After completing your response, **always** use the `/tq-reply` slash command
-   to send your response back to the user on Telegram.
-3. Keep responses concise — Telegram has a 4096 character limit per message.
-   If your response is longer, summarize the key points for Telegram and note
-   that the full details are in the tmux session.
-
-## Message Format
-
-- Use plain text or basic Markdown (Telegram supports *bold*, _italic_, `code`)
-- Avoid complex formatting, tables, or long code blocks
-- Lead with the answer, not the reasoning
-
-## Important
-
-- Do NOT use /tq-reply for internal tool calls or intermediate work — only for
-  your final response to the user's message.
-- If a task takes time, you can send a brief "working on it" via /tq-reply first,
-  then send the final result when done.
-- The user sees ONLY what you send via /tq-reply. Everything else stays in tmux.
-CONVEOF
-
-  # Write session metadata
-  cat > "$CONV_DIR/session.env" <<EOF
-SESSION_NAME=$SESSION_NAME
-CONVERSE_NAME=$CONVERSE_NAME
-CONVERSE_CWD=$CONVERSE_CWD
-CONV_DIR=$CONV_DIR
-STARTED=$(date -u +%Y-%m-%dT%H:%M:%S)
-EOF
-
-  # Set up active symlink
-  rm -f "$ACTIVE_LINK"
-  ln -sf "$CONV_DIR" "$ACTIVE_LINK"
-
-  # Write per-session settings.json with hooks
-  SESSION_DIR="$CONV_DIR/claude-settings"
-  HOOKS_DIR="$SESSION_DIR/hooks"
   mkdir -p "$HOOKS_DIR"
 
-  # Notification hook — fires when Claude wants to notify (e.g., permission request)
-  cat > "$HOOKS_DIR/on-notification.sh" <<'HOOKEOF'
+  # Stop hook
+  cat > "$HOOKS_DIR/on-stop.sh" <<HOOKEOF
 #!/usr/bin/env bash
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-# Claude Code fires Notification hook with the notification text.
-# Forward it to Telegram so the user knows Claude needs attention.
-NOTIFICATION="${1:-Claude Code notification}"
+SLUG="$SLUG"
 
+# Mark session inactive in registry
+if [[ -n "\$SLUG" ]] && command -v tq-converse &>/dev/null; then
+  tq-converse update-status "\$SLUG" stopped
+fi
+
+if command -v tq-message &>/dev/null; then
+  if [[ -n "\$SLUG" ]]; then
+    tq-message --message "[\$SLUG] Session ended."
+  else
+    tq-message --message "Orchestrator session ended."
+  fi
+fi
+HOOKEOF
+  chmod +x "$HOOKS_DIR/on-stop.sh"
+
+  # Notification hook
+  cat > "$HOOKS_DIR/on-notification.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+NOTIFICATION="${1:-Claude Code notification}"
 if command -v tq-message &>/dev/null; then
   tq-message --message "[notification] $NOTIFICATION"
 fi
 HOOKEOF
   chmod +x "$HOOKS_DIR/on-notification.sh"
 
-  # Stop hook — notify user the conversation session ended
-  cat > "$HOOKS_DIR/on-stop.sh" <<HOOKEOF
-#!/usr/bin/env bash
-set -euo pipefail
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-
-# Clean up active symlink if it points to our conversation
-ACTIVE_LINK="$CONVERSE_DIR/active"
-if [[ -L "\$ACTIVE_LINK" ]]; then
-  TARGET="\$(readlink "\$ACTIVE_LINK")"
-  if [[ "\$TARGET" == "$CONV_DIR" ]]; then
-    rm -f "\$ACTIVE_LINK"
-  fi
-fi
-
-if command -v tq-message &>/dev/null; then
-  tq-message --message "Conversation session ended."
-fi
-HOOKEOF
-  chmod +x "$HOOKS_DIR/on-stop.sh"
-
-  SETTINGS_FILE="$SESSION_DIR/settings.json"
   cat > "$SETTINGS_FILE" <<JSONEOF
 {
   "hooks": {
@@ -182,151 +232,330 @@ HOOKEOF
   }
 }
 JSONEOF
+}
 
-  # Capture Claude auth (same pattern as tq main script)
-  AUTH_ENV=""
-  OAUTH_TOKEN=""
-  OAUTH_SCRIPT=$(mktemp /tmp/tq-converse-auth-XXXXXX)
-  trap 'rm -f "$OAUTH_SCRIPT"' EXIT
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+usage() {
+  cat <<'EOF'
+Usage: tq-converse <command> [options]
 
-  cat > "$OAUTH_SCRIPT" <<'PYEOF'
-import sys, os, json, subprocess
-captured = {}
-try:
-    result = subprocess.run(
-        ['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-a', os.environ.get('USER', ''), '-w'],
-        capture_output=True, text=True
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        creds = json.loads(result.stdout.strip())
-        oauth = creds.get('claudeAiOauth', {})
-        if oauth.get('accessToken'):
-            captured['CLAUDE_CODE_OAUTH_KEY'] = oauth['accessToken']
-except Exception:
-    pass
-for k in ['CLAUDE_CODE_OAUTH_KEY', 'ANTHROPIC_API_KEY']:
-    if k not in captured and k in os.environ:
-        captured[k] = os.environ[k]
-for k, v in captured.items():
-    print(f"{k}={v}")
-PYEOF
+Session Management:
+  start                         Start the orchestrator (auto-converse mode)
+  stop [<slug>]                 Stop a session (or orchestrator if no slug)
+  status                        Show all sessions
+  list                          List active conversation slugs
 
-  AUTH_ENV="$(python3 "$OAUTH_SCRIPT" 2>/dev/null || true)"
+Orchestrator Commands (called by orchestrator Claude or tq-telegram-poll):
+  spawn <slug> [options]        Create a new child conversation session
+  route <slug> <message>        Send a message to a child session
+  send <message>                Send a message to the orchestrator
+
+Registry:
+  track-msg <slug> <msg-id>     Register a Telegram message ID to a session
+  lookup-msg <msg-id>           Find which session owns a Telegram message ID
+  update-status <slug> <status> Update session status in registry
+  registry                      Dump the full registry
+
+spawn options:
+  --cwd <dir>                   Working directory for the session
+  --desc <description>          Human-readable description
+  --msg-id <id>                 Telegram message ID that triggered this session
+EOF
+  exit 1
+}
+
+COMMAND="${1:-}"
+shift || true
+
+case "$COMMAND" in
+  start|stop|status|list|spawn|route|send|track-msg|lookup-msg|update-status|registry) ;;
+  *) usage ;;
+esac
+
+# ---------------------------------------------------------------------------
+# start — launch the orchestrator session
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "start" ]]; then
+  if tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+    echo "Orchestrator is already running."
+    echo "  Attach: tmux attach -t $ORCHESTRATOR_SESSION"
+    exit 0
+  fi
+
+  ORCH_DIR="$CONVERSE_DIR/orchestrator"
+  mkdir -p "$ORCH_DIR/hooks"
+
+  # Write orchestrator instructions
+  cat > "$ORCH_DIR/.tq-orchestrator.md" <<'ORCHEOF'
+# tq Orchestrator <!-- tq-orchestrator -->
+
+You are the **tq conversation orchestrator**. You manage multiple Claude Code
+conversation sessions on behalf of a user who messages you via Telegram.
+
+## How Messages Arrive
+
+Messages are injected into your session in this format:
+```
+[tq-msg msg_id=<ID> chat_id=<CHAT_ID>]
+<message text>
+```
+
+Or if the user replied to a previous message:
+```
+[tq-msg msg_id=<ID> chat_id=<CHAT_ID> reply_to=<REPLY_MSG_ID>]
+<message text>
+```
+
+## Your Job
+
+For each incoming message:
+
+1. **Read the session registry** to see active conversations:
+   ```bash
+   tq-converse list
+   ```
+   For more detail:
+   ```bash
+   tq-converse registry
+   ```
+
+2. **Decide routing**:
+   - If the message is clearly a continuation of an existing conversation → route to it
+   - If the message is a new topic → spawn a new session
+   - If ambiguous → make your best judgment based on the descriptions
+
+3. **Execute**:
+
+   **To route to an existing session:**
+   ```bash
+   tq-converse route <slug> '<message text>'
+   ```
+   Then confirm to the user via /tq-reply:
+   `[→ slug-name] Routed your message.`
+
+   **To spawn a new session:**
+   ```bash
+   tq-converse spawn <slug> --cwd <dir> --desc '<description>' --msg-id <MSG_ID>
+   ```
+   Then route the first message:
+   ```bash
+   tq-converse route <slug> '<message text>'
+   ```
+   Then tell the user via /tq-reply:
+   `[new: slug-name] Started conversation: <description>`
+
+4. **Track the Telegram message ID** so reply-threading works:
+   ```bash
+   tq-converse track-msg <slug> <MSG_ID>
+   ```
+
+## Slug Naming
+
+Pick short, descriptive kebab-case slugs (2-4 words):
+- `fix-auth-bug`
+- `refactor-api`
+- `update-docs`
+- `morning-review`
+
+## Rules
+
+- Always route or spawn — never answer the user's question yourself
+- Keep /tq-reply confirmations very short (one line)
+- If the user says something like "in the auth thread" or "#fix-auth-bug", route to that slug
+- If a user asks to stop a session: `tq-converse stop <slug>`
+- If a user asks for status: run `tq-converse status` and share via /tq-reply
+- Default cwd for new sessions: `$HOME/.tq/workspace` unless the message implies a specific project
+ORCHEOF
+
+  # Write settings with hooks
+  SETTINGS_FILE="$ORCH_DIR/settings.json"
+  write_session_settings "$ORCH_DIR/hooks" "$SETTINGS_FILE" ""
+
+  ensure_registry
 
   # Start tmux session
   tmux start-server
-  tmux new-session -d -s "$SESSION_NAME" -n "converse"
+  tmux new-session -d -s "$ORCHESTRATOR_SESSION" -n "orchestrator"
 
-  # Set auth env vars in the tmux session
-  while IFS='=' read -r KEY VAL; do
-    if [[ -n "$KEY" && -n "$VAL" ]]; then
-      tmux send-keys -t "$SESSION_NAME:converse" "export $KEY='$VAL'" Enter
-    fi
-  done <<< "$AUTH_ENV"
+  inject_auth "$ORCHESTRATOR_SESSION:orchestrator"
 
-  # cd to working directory
-  tmux send-keys -t "$SESSION_NAME:converse" "cd '$CONVERSE_CWD'" Enter
+  tmux send-keys -t "$ORCHESTRATOR_SESSION:orchestrator" "cd '$ORCH_DIR'" Enter
 
-  # Launch Claude Code in interactive mode with our settings
-  # --dangerously-skip-permissions for headless operation
-  # The .tq-converse.md file in the cwd provides conversation instructions
-  tmux send-keys -t "$SESSION_NAME:converse" \
+  tmux send-keys -t "$ORCHESTRATOR_SESSION:orchestrator" \
     "claude --settings '$SETTINGS_FILE' --dangerously-skip-permissions" Enter
 
-  # Wait for Claude to start, then send initial context
+  # Wait for Claude to start, then prime with instructions
   sleep 3
-  tmux send-keys -t "$SESSION_NAME:converse" \
-    "Read .tq-converse.md and follow those instructions for all future messages. Reply with 'ready' when understood." Enter
+  tmux send-keys -t "$ORCHESTRATOR_SESSION:orchestrator" \
+    "Read .tq-orchestrator.md — those are your instructions. Acknowledge with 'ready'." Enter
 
-  echo "Conversation session started: $SESSION_NAME"
-  echo "  CWD:      $CONVERSE_CWD"
-  echo "  Conv dir: $CONV_DIR"
-  echo "  tmux:     tmux attach -t $SESSION_NAME"
+  echo "Orchestrator started: $ORCHESTRATOR_SESSION"
+  echo "  Attach: tmux attach -t $ORCHESTRATOR_SESSION"
   echo ""
-  echo "Send messages via: tq-converse send 'your message'"
-  echo "Or via Telegram (tq-telegram-poll will route automatically)."
+  echo "Send /converse from Telegram to enable auto-routing."
+  echo "All messages will be routed to the appropriate conversation."
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# stop — end the active conversation session
+# spawn — create a new child conversation session
 # ---------------------------------------------------------------------------
-if [[ "$COMMAND" == "stop" ]]; then
-  if [[ ! -L "$ACTIVE_LINK" ]]; then
-    echo "No active conversation session."
-    exit 0
-  fi
+if [[ "$COMMAND" == "spawn" ]]; then
+  SLUG="${1:-}"
+  shift || true
 
-  CONV_DIR="$(readlink "$ACTIVE_LINK")"
-  if [[ ! -f "$CONV_DIR/session.env" ]]; then
-    echo "Active link points to invalid conversation: $CONV_DIR"
-    rm -f "$ACTIVE_LINK"
+  if [[ -z "$SLUG" ]]; then
+    echo "Usage: tq-converse spawn <slug> [--cwd <dir>] [--desc <desc>] [--msg-id <id>]" >&2
     exit 1
   fi
 
-  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
+  CHILD_CWD="$HOME/.tq/workspace"
+  DESCRIPTION=""
+  MSG_ID=""
 
-  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    # Send /exit to Claude Code gracefully
-    tmux send-keys -t "$SESSION_NAME" "/exit" Enter
-    sleep 2
-    # Kill if still alive
-    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-      tmux kill-session -t "$SESSION_NAME"
-    fi
-    echo "Conversation session '$SESSION_NAME' stopped."
-  else
-    echo "Session '$SESSION_NAME' was not running."
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --cwd)    CHILD_CWD="${2:-}"; shift 2 ;;
+      --desc)   DESCRIPTION="${2:-}"; shift 2 ;;
+      --msg-id) MSG_ID="${2:-}"; shift 2 ;;
+      *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  CHILD_SESSION="tq-conv-${SLUG}"
+
+  # Check if already exists
+  if tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+    echo "Session '$CHILD_SESSION' already exists."
+    exit 0
   fi
 
-  rm -f "$ACTIVE_LINK"
+  # Create conversation directory
+  CONV_DIR="$CONVERSE_DIR/sessions/$SLUG"
+  mkdir -p "$CONV_DIR/inbox" "$CONV_DIR/outbox" "$CONV_DIR/hooks"
+
+  # Write conversation-mode instructions
+  cat > "$CONV_DIR/.tq-converse.md" <<CONVEOF
+# tq Conversation: $SLUG <!-- tq-conversation-mode -->
+
+You are in **Telegram conversation mode** for the conversation **$SLUG**.
+Messages you receive are from a user chatting via Telegram.
+
+## Response Protocol
+
+1. Process each message normally — read files, write code, answer questions.
+2. After completing your response, **always** use the \`/tq-reply\` slash command
+   to send your response back to the user on Telegram.
+3. Keep responses concise — Telegram has a 4096 character limit per message.
+
+## Important
+
+- Your conversation slug is: **$SLUG**
+- Before calling /tq-reply, write your slug to the marker file:
+  \`echo "$SLUG" > $CONV_DIR/current-slug\`
+- The user sees ONLY what you send via /tq-reply. Everything else stays in tmux.
+- Lead with the answer, not the reasoning.
+- Use plain text or basic Markdown (*bold*, _italic_, \`code\`).
+CONVEOF
+
+  # Write current slug marker (so /tq-reply knows which session this is)
+  echo "$SLUG" > "$CONV_DIR/current-slug"
+
+  # Write settings with hooks
+  SETTINGS_FILE="$CONV_DIR/settings.json"
+  write_session_settings "$CONV_DIR/hooks" "$SETTINGS_FILE" "$SLUG"
+
+  # Register in registry
+  ensure_registry
+  CREATED="$(date -u +%Y-%m-%dT%H:%M:%S)"
+  registry_op set "$SLUG" "$(python3 -c "
+import json, sys
+print(json.dumps({
+    'description': sys.argv[1],
+    'tmux': sys.argv[2],
+    'cwd': sys.argv[3],
+    'conv_dir': sys.argv[4],
+    'created': sys.argv[5],
+    'last_active': sys.argv[5],
+    'status': 'active'
+}))
+" "$DESCRIPTION" "$CHILD_SESSION" "$CHILD_CWD" "$CONV_DIR" "$CREATED")"
+
+  # Track triggering message if provided
+  if [[ -n "$MSG_ID" ]]; then
+    registry_op track-msg "$SLUG" "$MSG_ID"
+  fi
+
+  # Start tmux session
+  mkdir -p "$CHILD_CWD"
+  tmux start-server
+  tmux new-session -d -s "$CHILD_SESSION" -n "$SLUG"
+
+  inject_auth "$CHILD_SESSION:$SLUG"
+
+  tmux send-keys -t "$CHILD_SESSION:$SLUG" "cd '$CHILD_CWD'" Enter
+
+  tmux send-keys -t "$CHILD_SESSION:$SLUG" \
+    "claude --settings '$SETTINGS_FILE' --dangerously-skip-permissions" Enter
+
+  sleep 3
+  tmux send-keys -t "$CHILD_SESSION:$SLUG" \
+    "Read $CONV_DIR/.tq-converse.md — those are your instructions. Acknowledge with 'ready'." Enter
+
+  echo "Spawned conversation: $SLUG ($CHILD_SESSION)"
+  echo "  CWD: $CHILD_CWD"
+  echo "  Desc: $DESCRIPTION"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# status — show conversation session info
+# route — send a message to a child conversation session
 # ---------------------------------------------------------------------------
-if [[ "$COMMAND" == "status" ]]; then
-  if [[ ! -L "$ACTIVE_LINK" ]]; then
-    echo "No active conversation session."
-    exit 0
+if [[ "$COMMAND" == "route" ]]; then
+  SLUG="${1:-}"
+  shift || true
+  MESSAGE="$*"
+
+  if [[ -z "$SLUG" || -z "$MESSAGE" ]]; then
+    echo "Usage: tq-converse route <slug> <message>" >&2
+    exit 1
   fi
 
-  CONV_DIR="$(readlink "$ACTIVE_LINK")"
-  if [[ ! -f "$CONV_DIR/session.env" ]]; then
-    echo "Active link is stale (pointing to $CONV_DIR)."
-    rm -f "$ACTIVE_LINK"
-    exit 0
+  CHILD_SESSION="tq-conv-${SLUG}"
+
+  if ! tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+    echo "Session '$CHILD_SESSION' is not running." >&2
+    exit 1
   fi
 
-  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
-  CONVERSE_CWD="$(grep '^CONVERSE_CWD=' "$CONV_DIR/session.env" | cut -d= -f2)"
-  STARTED="$(grep '^STARTED=' "$CONV_DIR/session.env" | cut -d= -f2)"
+  # Log the incoming message
+  CONV_DIR="$CONVERSE_DIR/sessions/$SLUG"
+  mkdir -p "$CONV_DIR/inbox"
+  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+  echo "$MESSAGE" > "$CONV_DIR/inbox/${TIMESTAMP}.txt"
 
-  RUNNING="no"
-  if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    RUNNING="yes"
-  else
-    rm -f "$ACTIVE_LINK"
-  fi
+  # Update last_active in registry
+  registry_op update-field "$SLUG" "last_active" "$(date -u +%Y-%m-%dT%H:%M:%S)" 2>/dev/null || true
 
-  INBOX_COUNT="$(find "$CONV_DIR/inbox" -type f 2>/dev/null | wc -l | tr -d ' ')"
-  OUTBOX_COUNT="$(find "$CONV_DIR/outbox" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  # Write to temp file and use tmux load-buffer for reliable injection
+  MSG_TMPFILE=$(mktemp /tmp/tq-converse-msg-XXXXXX)
+  printf '%s' "$MESSAGE" > "$MSG_TMPFILE"
 
-  echo "Conversation: $SESSION_NAME"
-  echo "  Running:  $RUNNING"
-  echo "  CWD:      $CONVERSE_CWD"
-  echo "  Started:  $STARTED"
-  echo "  Messages: $INBOX_COUNT in / $OUTBOX_COUNT out"
-  echo "  Conv dir: $CONV_DIR"
-  if [[ "$RUNNING" == "yes" ]]; then
-    echo "  Attach:   tmux attach -t $SESSION_NAME"
-  fi
+  tmux load-buffer "$MSG_TMPFILE"
+  tmux paste-buffer -t "$CHILD_SESSION:$SLUG"
+  sleep 0.2
+  tmux send-keys -t "$CHILD_SESSION:$SLUG" Enter
+
+  rm -f "$MSG_TMPFILE"
+
+  echo "Routed to $SLUG"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# send — inject a message into the active conversation
+# send — send a message to the orchestrator
 # ---------------------------------------------------------------------------
 if [[ "$COMMAND" == "send" ]]; then
   MESSAGE="$*"
@@ -335,38 +564,163 @@ if [[ "$COMMAND" == "send" ]]; then
     exit 1
   fi
 
-  if [[ ! -L "$ACTIVE_LINK" ]]; then
-    echo "No active conversation session. Start one with: tq-converse start" >&2
+  if ! tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+    echo "Orchestrator is not running. Start with: tq-converse start" >&2
     exit 1
   fi
 
-  CONV_DIR="$(readlink "$ACTIVE_LINK")"
-  SESSION_NAME="$(grep '^SESSION_NAME=' "$CONV_DIR/session.env" | cut -d= -f2)"
-
-  if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "Conversation session '$SESSION_NAME' is not running." >&2
-    rm -f "$ACTIVE_LINK"
-    exit 1
-  fi
-
-  # Log the incoming message
-  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-  echo "$MESSAGE" > "$CONV_DIR/inbox/${TIMESTAMP}.txt"
-
-  # Escape the message for tmux send-keys
-  # Write to a temp file and use tmux load-buffer to avoid quoting issues
   MSG_TMPFILE=$(mktemp /tmp/tq-converse-msg-XXXXXX)
-  echo "$MESSAGE" > "$MSG_TMPFILE"
+  printf '%s' "$MESSAGE" > "$MSG_TMPFILE"
 
-  # Use tmux load-buffer + paste-buffer for reliable message injection
   tmux load-buffer "$MSG_TMPFILE"
-  tmux paste-buffer -t "$SESSION_NAME:converse"
-  # Send Enter to submit the message
+  tmux paste-buffer -t "$ORCHESTRATOR_SESSION:orchestrator"
   sleep 0.2
-  tmux send-keys -t "$SESSION_NAME:converse" Enter
+  tmux send-keys -t "$ORCHESTRATOR_SESSION:orchestrator" Enter
 
   rm -f "$MSG_TMPFILE"
 
-  echo "Message sent to conversation."
+  echo "Sent to orchestrator."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# stop — stop a session or the orchestrator
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "stop" ]]; then
+  SLUG="${1:-}"
+
+  if [[ -z "$SLUG" ]]; then
+    # Stop orchestrator
+    if tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+      tmux send-keys -t "$ORCHESTRATOR_SESSION" "/exit" Enter
+      sleep 2
+      if tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+        tmux kill-session -t "$ORCHESTRATOR_SESSION"
+      fi
+      echo "Orchestrator stopped."
+    else
+      echo "Orchestrator is not running."
+    fi
+    exit 0
+  fi
+
+  # Stop a specific child session
+  CHILD_SESSION="tq-conv-${SLUG}"
+  if tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+    tmux send-keys -t "$CHILD_SESSION" "/exit" Enter
+    sleep 2
+    if tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+      tmux kill-session -t "$CHILD_SESSION"
+    fi
+    echo "Session '$SLUG' stopped."
+  else
+    echo "Session '$SLUG' is not running."
+  fi
+
+  # Update registry
+  registry_op update-field "$SLUG" "status" "stopped" 2>/dev/null || true
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# status — show orchestrator and all sessions
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "status" ]]; then
+  echo "=== Orchestrator ==="
+  if tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+    echo "  Running: yes"
+    echo "  Attach:  tmux attach -t $ORCHESTRATOR_SESSION"
+  else
+    echo "  Running: no"
+  fi
+  echo ""
+
+  echo "=== Conversations ==="
+  ensure_registry
+
+  SESSIONS="$(registry_op list 2>/dev/null || true)"
+  if [[ -z "$SESSIONS" ]]; then
+    echo "  (none)"
+  else
+    printf "  %-20s %-10s %-25s %s\n" "SLUG" "STATUS" "TMUX" "DESCRIPTION"
+    printf "  %-20s %-10s %-25s %s\n" "----" "------" "----" "-----------"
+    while IFS=$'\t' read -r SLUG STATUS TMUX DESC; do
+      # Check actual tmux status
+      LIVE="$STATUS"
+      if [[ "$STATUS" == "active" ]] && ! tmux has-session -t "$TMUX" 2>/dev/null; then
+        LIVE="dead"
+        registry_op update-field "$SLUG" "status" "stopped" 2>/dev/null || true
+      fi
+      printf "  %-20s %-10s %-25s %s\n" "$SLUG" "$LIVE" "$TMUX" "$DESC"
+    done <<< "$SESSIONS"
+  fi
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# list — list active session slugs (compact, for orchestrator consumption)
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "list" ]]; then
+  ensure_registry
+  SUMMARY="$(registry_op summary 2>/dev/null || true)"
+  if [[ -z "$SUMMARY" ]]; then
+    echo "(no active conversations)"
+  else
+    printf "%-20s %-50s %s\n" "SLUG" "DESCRIPTION" "CWD"
+    printf "%-20s %-50s %s\n" "----" "-----------" "---"
+    while IFS=$'\t' read -r SLUG DESC CWD; do
+      printf "%-20s %-50s %s\n" "$SLUG" "$DESC" "$CWD"
+    done <<< "$SUMMARY"
+  fi
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# track-msg — register a Telegram message ID to a session slug
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "track-msg" ]]; then
+  SLUG="${1:-}"
+  MSG_ID="${2:-}"
+  if [[ -z "$SLUG" || -z "$MSG_ID" ]]; then
+    echo "Usage: tq-converse track-msg <slug> <msg-id>" >&2
+    exit 1
+  fi
+  registry_op track-msg "$SLUG" "$MSG_ID"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# lookup-msg — find which session owns a Telegram message ID
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "lookup-msg" ]]; then
+  MSG_ID="${1:-}"
+  if [[ -z "$MSG_ID" ]]; then
+    echo "Usage: tq-converse lookup-msg <msg-id>" >&2
+    exit 1
+  fi
+  registry_op lookup-msg "$MSG_ID"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# update-status — update session status in registry
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "update-status" ]]; then
+  SLUG="${1:-}"
+  STATUS="${2:-}"
+  if [[ -z "$SLUG" || -z "$STATUS" ]]; then
+    echo "Usage: tq-converse update-status <slug> <status>" >&2
+    exit 1
+  fi
+  registry_op update-field "$SLUG" "status" "$STATUS"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# registry — dump the full registry
+# ---------------------------------------------------------------------------
+if [[ "$COMMAND" == "registry" ]]; then
+  ensure_registry
+  registry_op dump
   exit 0
 fi

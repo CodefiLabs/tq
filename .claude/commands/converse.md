@@ -1,18 +1,20 @@
 ---
 name: converse
-description: Start, stop, or check status of a Telegram conversation session with Claude Code.
+description: Start, stop, or check status of Telegram conversation sessions and the orchestrator.
 tags: tq, telegram, conversation
 allowed-tools: Bash(tq-converse)
 ---
 
 Arguments: $ARGUMENTS
 
-Manage a Telegram conversation session. Parse the arguments:
+Manage Telegram conversation sessions. Parse the arguments:
 
-- No arguments or `start`: start a new conversation session
-- `stop`: stop the active conversation session
-- `status`: show conversation status
-- `start --cwd /path`: start with a specific working directory
+- No arguments or `start`: start the orchestrator (auto-converse mode)
+- `stop`: stop the orchestrator
+- `stop <slug>`: stop a specific conversation session
+- `status`: show all sessions
+- `list`: list active conversation slugs
+- `spawn <slug> [--cwd <dir>] [--desc <desc>]`: create a new child session
 
 Run the appropriate command:
 
