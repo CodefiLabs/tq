@@ -23,11 +23,15 @@ Arguments: $ARGUMENTS
 3. **Find the tq run line** for this queue (the `tq` run line, not `tq --status`).
    If not found, say "No active schedule found for `<name>` queue."
 
-4. **Remove only the tq run line**, keeping the `tq --status` sweep:
-   ```bash
-   (crontab -l 2>/dev/null | grep -v "^[^#]*tq [^-].*<name>.yaml") | crontab -
-   ```
-   (The `tq --status` line is kept so state continues to be maintained.)
+4. **Show the line to be removed** before modifying crontab. Ask for confirmation if the user is in interactive mode.
 
-5. **Confirm**: Show what was removed and note that `tq --status` is still running.
+5. **Remove only the tq run line**, keeping the `tq --status` sweep:
+   ```bash
+   (crontab -l 2>/dev/null | grep -v "^[^#]*tq [^-].*/<name>\.yaml") | crontab -
+   ```
+   Use `/<name>\.yaml` (escaped dot, path separator) to avoid matching `morning-review` when pausing `morning`.
+
+6. **Confirm**: Show what was removed and note that `tq --status` is still running.
    Suggest `/schedule <name>` to resume.
+
+Related: `/schedule`, `/unschedule`, `/jobs`

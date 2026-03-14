@@ -9,14 +9,14 @@ description: >
   in tmux sessions via the tq CLI tool. Triggers on phrases like "queue", "tq", "task queue",
   "tmux queue", "scheduled claude tasks", "conversation mode", "telegram chat", "converse",
   "telegram session", "poll telegram", "tq-converse".
-version: 1.2.0
+version: 1.5.0
 ---
 
 # tq -- Claude Task Queue Runner
 
 Script: `${CLAUDE_PLUGIN_ROOT}/scripts/tq`
 
-Installed to PATH via `/install`: `/opt/homebrew/bin/tq`
+Installed to PATH via `/install`: `$(command -v tq)`
 
 ## Overview
 
@@ -81,8 +81,8 @@ tq --status <queue.yaml>  # print status table; flip dead sessions to done
 ## Crontab Pattern
 
 ```cron
-0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+0 9 * * * $(command -v tq) ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * $(command -v tq) --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
 The `tq --status` cron runs every 30 min to reap dead sessions and flip their state to `done`.
@@ -94,8 +94,19 @@ When using `/todo` without an explicit queue name:
 - Schedule keyword present -> derive from it: "every morning" -> `morning`, "daily" -> `daily`, "weekly" -> `weekly`
 - No schedule -> use `basename` of current working directory
 
-## Reset
+## Reset Modes
 
+Queue files support a `reset:` key for automatic state clearing:
+
+| Mode | Behaviour |
+|------|-----------|
+| `daily` | Clear all task state once per calendar day |
+| `weekly` | Clear once per ISO week (Monday-Sunday) |
+| `hourly` | Clear once per hour |
+| `always` | Clear on every `tq` run |
+| `on-complete` | Per-task: delete state after task finishes |
+
+Manual reset:
 - One task: delete its state file from `.tq/<queue-basename>/`
 - Entire queue: `rm -rf ~/.tq/queues/.tq/<queue-basename>/`
 
@@ -122,6 +133,16 @@ tq-converse list                          # list active sessions
 tq-converse status                        # show all session statuses
 tq-converse stop [<slug>]                 # stop session or orchestrator
 ```
+
+## Background Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `tq-telegram-poll` | Long-polls Telegram for messages, routes to orchestrator or spawns tasks |
+| `tq-telegram-watchdog` | Ensures the poll cron entry exists |
+| `tq-cron-sync` | Syncs `schedule:` keys from queue YAML files to crontab entries |
+
+These run via cron — see `/health` to verify they're active.
 
 ## Additional Resources
 

@@ -20,7 +20,11 @@ Read `~/.tq/config/workspaces.yaml`. If it exists, show the current `scan_dirs` 
 - If no config exists and no arguments, ask the user which directories to scan (suggest `~/Sites`, `~/Projects`, `~/code`, `~/.tq/workspace`).
 - If config exists and no arguments, show current dirs and ask to keep or replace.
 
-Resolve all paths to absolute (expand `~`). Always include `~/.tq/workspace` unless explicitly excluded. Create it with `mkdir -p` if needed.
+Resolve all paths to absolute (expand `~`). Validate each directory exists:
+```bash
+[[ -d "/resolved/path" ]] || echo "WARN: /resolved/path does not exist"
+```
+Always include `~/.tq/workspace` unless explicitly excluded. Create it with `mkdir -p` if needed.
 
 ## Step 3 — Write workspaces config
 
@@ -49,4 +53,6 @@ Write `~/.tq/workspace-map.md` with a markdown table (columns: project, path, ty
 
 ## Step 6 — Summary
 
-Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories. Remind user to re-run `/init` after adding new projects.
+Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories or doesn't exist. Remind user to re-run `/init` after adding new projects.
+
+Related: `/todo`, `/health`

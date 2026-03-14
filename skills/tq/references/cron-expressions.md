@@ -28,16 +28,27 @@
 | 5 | Friday |
 | 6 | Saturday |
 
+## Automatic vs Manual Crontab Management
+
+Two paths to scheduling:
+
+| Method | How | When |
+|--------|-----|------|
+| **Automatic** (`tq-cron-sync`) | Add `schedule:` key to queue YAML. `tq-cron-sync` syncs to crontab every 20 min. | Preferred — source of truth lives in the queue file. |
+| **Manual** (`/schedule`, `/todo`) | Commands directly modify crontab. | When you need immediate scheduling or custom cron expressions. |
+
+If a queue has a `schedule:` key, `tq-cron-sync` manages it. Manual edits will be overwritten on the next sync cycle. To override: remove the `schedule:` key from the YAML first.
+
 ## Standard tq Crontab Block
 
 Every scheduled queue gets two cron lines:
 
 ```cron
 # Run queue (spawn pending tasks)
-<cron> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+<cron> $(command -v tq) ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
 
 # Status sweep (reap dead sessions every 30 min)
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
+*/30 * * * * $(command -v tq) --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
 ## Updating Crontab
@@ -45,9 +56,9 @@ Every scheduled queue gets two cron lines:
 Replace existing lines for the same queue by filtering out old entries before appending new ones:
 
 ```bash
-(crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
-  echo "<cron> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1"; \
-  echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
+(crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml"; \
+  echo "<cron> $(command -v tq) ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1"; \
+  echo "*/30 * * * * $(command -v tq) --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
 ```
 
 The `grep -v` removes all existing lines referencing this queue before appending new ones, preventing duplicates.

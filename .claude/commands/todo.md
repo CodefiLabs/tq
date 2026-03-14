@@ -41,23 +41,12 @@ Write to `~/.tq/queues/<name>.yaml`. If existing queue has a different `cwd:`, w
 
 Translate schedule to cron expression (e.g. "every morning" -> `0 9 * * *`, "every weekday" -> `0 9 * * 1-5`, "nightly" -> `0 22 * * *`).
 
-Install cron entries:
-```bash
-mkdir -p ~/.tq/logs
-(crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
-  echo "<cron> /opt/homebrew/bin/tq ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1"; \
-  echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
-```
+Follow the same steps as `/schedule` to install cron entries and compute `reset:` TTL. Use `$(command -v tq)` for the binary path and `grep -v "tq.*/<name>\.yaml"` to avoid prefix collisions.
 
-Compute and add `reset:` TTL to the queue YAML (before `cwd:`), unless one already exists:
-- `*/N` hour interval -> `floor(N * 0.5)`h
-- Hour list (e.g. `8,12,18`) -> `floor(min_gap * 0.5)`h
-- Weekly (specific day-of-week) -> `3d`
-- Daily/weekday/other -> `12h`
-- Minimum: `1h`
-
-Skip reset computation entirely for unscheduled (one-off) tasks.
+Skip scheduling entirely for unscheduled (one-off) tasks.
 
 ## Step 6 — Confirm
 
-Show: queue file path and contents, `cwd` for task execution, cron schedule in plain English (or "not scheduled -- run manually with `tq ~/.tq/queues/<name>.yaml`").
+Show: queue file path and contents, `cwd` for task execution, cron schedule in plain English (or "not scheduled — run manually with `tq ~/.tq/queues/<name>.yaml`").
+
+Related: `/schedule`, `/jobs`, `/health`

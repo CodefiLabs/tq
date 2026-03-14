@@ -34,3 +34,7 @@ Arguments: $ARGUMENTS
 5. **If `$ARGUMENTS` mentions a specific queue**, filter the output to that queue only.
 
 6. **If no tq jobs found**: Say so and suggest `/todo check something every morning` as an example.
+
+7. **Check for orphaned cron entries**: If a cron line references a queue file that doesn't exist in `~/.tq/queues/`, warn: "Orphaned cron entry for `<name>` — queue file missing."
+
+Related: `/schedule`, `/pause`, `/unschedule`, `/todo`

@@ -11,7 +11,8 @@ Given a prompt string, derive a tmux session name and window name as follows.
 3. Replace any non-`[a-z0-9]` character with `-`
 4. Strip trailing `-` characters
 5. Truncate to 20 characters
-6. Append `-<epoch-suffix>` (last 6 digits of Unix epoch)
+6. Prepend `tq-` prefix
+7. Append `-<epoch-suffix>` (last 6 digits of Unix epoch)
 
 ### Window Name
 
@@ -23,10 +24,10 @@ Given a prompt string, derive a tmux session name and window name as follows.
 
 | Prompt | Session | Window |
 |--------|---------|--------|
-| `fix the login bug in auth service` | `fix-the-login-<epoch>` | `fix-the` |
-| `write unit tests for payment module` | `write-unit-tests-<epoch>` | `write-unit` |
-| `Refactor Auth Module` | `refactor-auth-module-<epoch>` | `refactor-auth` |
-| `check LinkedIn saved posts` | `check-linkedin-saved-<epoch>` | `check-linkedin` |
+| `fix the login bug in auth service` | `tq-fix-the-login-<epoch>` | `fix-the` |
+| `write unit tests for payment module` | `tq-write-unit-tests-<epoch>` | `write-unit` |
+| `Refactor Auth Module` | `tq-refactor-auth-module-<epoch>` | `refactor-auth` |
+| `check LinkedIn saved posts` | `tq-check-linkedin-saved-<epoch>` | `check-linkedin` |
 
 ## Bash Implementation
 
@@ -37,7 +38,7 @@ SESSION_BASE="$(echo "$PROMPT" | awk '{print $1" "$2" "$3}' \
   | tr -cs 'a-z0-9' '-' \
   | sed 's/-*$//' \
   | cut -c1-20)"
-SESSION="${SESSION_BASE}-${EPOCH_SUFFIX}"
+SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
 WINDOW="$(echo "$PROMPT" | awk '{print $1" "$2}' \
   | tr '[:upper:]' '[:lower:]' \
   | tr -cs 'a-z0-9' '-' \
