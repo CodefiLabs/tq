@@ -1,6 +1,6 @@
 {
   "name": "@codefilabs/tq",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "A lightweight task queue runner that spawns Claude AI tasks as independent tmux sessions",
   "keywords": [
     "claude",

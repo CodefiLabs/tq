@@ -67,6 +67,59 @@ mkdir -p ~/.tq/queues ~/.tq/logs ~/.tq/config
 # Use $INSTALL_DIR directly — PATH may not reflect the just-created symlink yet
 "$INSTALL_DIR/tq-cron-sync" --interval 20
 
+# ---------------------------------------------------------------------------
+# Step 4: Set up Telegram long-poll daemon via launchd (if bot is configured)
+# ---------------------------------------------------------------------------
+PLIST_LABEL="com.codefi.tq-telegram"
+PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
+
+if [[ -f "$HOME/.tq/config/message.yaml" ]] && grep -q 'bot_token' "$HOME/.tq/config/message.yaml" 2>/dev/null; then
+  # Remove old cron-based poll entries (replaced by launchd daemon)
+  CRONTAB_CURRENT="$(crontab -l 2>/dev/null || true)"
+  if echo "$CRONTAB_CURRENT" | grep -q 'tq-telegram-poll'; then
+    echo "$CRONTAB_CURRENT" | grep -v 'tq-telegram-poll' | grep -v 'tq-telegram-watchdog' | crontab -
+    echo "  removed cron-based telegram poll (replaced by launchd daemon)"
+  fi
+
+  cat > "$PLIST_PATH" <<PLISTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${INSTALL_DIR}/tq-telegram-poll</string>
+    <string>--daemon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${HOME}/.tq/logs/tq-telegram.log</string>
+  <key>StandardErrorPath</key>
+  <string>${HOME}/.tq/logs/tq-telegram.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
+PLISTEOF
+
+  # (Re)load the daemon
+  launchctl bootout "gui/$(id -u)/${PLIST_LABEL}" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
+  echo "  telegram daemon started (launchd: ${PLIST_LABEL})"
+else
+  echo ""
+  echo "Telegram bot not configured yet. After running tq-setup, re-run this"
+  echo "installer to start the long-poll daemon automatically."
+fi
+
 echo ""
 echo "tq installed. Cron schedules are managed automatically."
 echo ""
@@ -83,9 +136,6 @@ echo "To configure Telegram notifications:"
 echo "  tq-setup"
 echo ""
 echo "Or from Claude Code: /setup-telegram"
-echo ""
-echo "To relay Telegram messages as tq tasks, add to crontab:"
-echo "  * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1"
 echo ""
 echo "Conversation mode (interactive Telegram <-> Claude Code):"
 echo "  tq-converse start [--cwd /path/to/project]"
