@@ -101,3 +101,31 @@ h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
 
 This is the stable task identity. Changing the algorithm, encoding, or slice length orphans
 all existing state files — tq will re-run every task that was already `done`.
+
+## Conversation Mode: Do Not Use `send-keys` for Message Body
+
+```bash
+# CORRECT — tmux load-buffer + paste-buffer avoids quoting issues
+MSG_TMPFILE=$(mktemp /tmp/tq-converse-msg-XXXXXX)
+printf '%s' "$MESSAGE" > "$MSG_TMPFILE"
+tmux load-buffer "$MSG_TMPFILE"
+tmux paste-buffer -t "$SESSION:$WINDOW"
+sleep 0.2
+tmux send-keys -t "$SESSION:$WINDOW" Enter
+rm -f "$MSG_TMPFILE"
+
+# WRONG — special characters in the message break quoting
+tmux send-keys -t "$SESSION" "$MESSAGE" Enter
+```
+
+User messages from Telegram can contain arbitrary characters (quotes, backticks, dollar signs).
+The `load-buffer` + `paste-buffer` pattern handles these safely.
+
+## Conversation Registry: Do Not Modify Format Without Updating Both Sides
+
+The registry (`~/.tq/conversations/registry.json`) is read by:
+- `tq-converse` (all registry_op subcommands)
+- `tq-telegram-poll` (lookup-msg for reply routing)
+
+Changing the JSON schema requires updating the embedded Python in `tq-converse`'s
+`registry_op` function AND any code in `tq-telegram-poll` that reads from it.

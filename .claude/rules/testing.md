@@ -54,8 +54,20 @@ tasks:
       service for clarity
 ```
 
+5. **Conversation registry operations** — `tq-converse` registry subcommands:
+   set/get/remove sessions, track-msg/lookup-msg message ID mapping,
+   update-status. Test with a temp registry.json file.
+
+6. **3-tier message routing** — `tq-telegram-poll` routing logic:
+   reply_to matches registry → Tier 1, #slug prefix → Tier 2, fallback → Tier 3.
+   Test with mock `tq-converse` and a pre-populated registry.
+
+7. **tq-message reply threading** — `--reply-to` flag correctly adds
+   `reply_to_message_id` to the Telegram API call. Test with mock curl.
+
 ## What NOT to Test
 
 - macOS keychain reads (mock `security` CLI instead)
 - tmux session spawning in CI (mock `tmux` instead)
 - `claude` CLI invocation (the launcher is generated; test the generation, not execution)
+- Orchestrator Claude's routing decisions (these are AI-powered and non-deterministic)

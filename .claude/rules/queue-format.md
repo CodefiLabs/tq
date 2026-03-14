@@ -1,6 +1,6 @@
 # Queue File Format
 
-Queue files are YAML files passed to `tq` as the first argument.
+Queue files are YAML files passed to `tq` as the first argument. These are used for **queue mode** only. **Conversation mode** (Telegram interactive sessions) does not use queue files — it is managed via `tq-converse` and the orchestrator.
 
 ## Required Top-Level Keys
 
