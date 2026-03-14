@@ -1,20 +1,23 @@
 # tq Cron Expression Reference
 
-## Natural Language → Cron Mapping
+## Natural Language to Cron Mapping
 
 | Natural Language | Cron Expression | Notes |
 |-----------------|-----------------|-------|
 | "every morning" / "daily at 9am" | `0 9 * * *` | Default morning time |
 | "every night" / "nightly" | `0 22 * * *` | 10pm |
-| "every weekday" | `0 9 * * 1-5` | Mon–Fri at 9am |
-| "every weekday at 6pm" | `0 18 * * 1-5` | Mon–Fri at 6pm |
+| "every weekday" | `0 9 * * 1-5` | Mon-Fri at 9am |
+| "every weekday at 6pm" | `0 18 * * 1-5` | Mon-Fri at 6pm |
 | "every monday" / "weekly on mondays" | `0 9 * * 1` | 9am Monday |
 | "every monday at 8am" | `0 8 * * 1` | 8am Monday |
 | "every hour" / "hourly" | `0 * * * *` | Top of each hour |
 | "every 4 hours" | `0 */4 * * *` | Every 4 hours |
 | "every 30 minutes" | `*/30 * * * *` | Every 30 min |
+| "every 15 minutes" | `*/15 * * * *` | Every 15 min |
+| "twice daily" / "morning and evening" | `0 9,18 * * *` | 9am and 6pm |
 | "daily" | `0 9 * * *` | Default to 9am |
 | "weekly" | `0 9 * * 1` | Default to Monday 9am |
+| "first of the month" | `0 9 1 * *` | 9am on the 1st |
 
 ## Day-of-Week Numbers
 
@@ -40,9 +43,13 @@ Every scheduled queue gets two cron lines:
 */30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1
 ```
 
-## Updating Crontab
+## Automatic Crontab Management
 
-Replace existing lines for the same queue:
+`tq-cron-sync` runs every 20 minutes and scans `~/.tq/queues/*.yaml` for `schedule:` keys. It automatically adds, updates, or removes crontab entries. No manual `crontab -e` needed.
+
+### Manual Override (if needed)
+
+Replace existing lines for the same queue by filtering out old entries before appending new ones:
 
 ```bash
 (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
@@ -50,9 +57,9 @@ Replace existing lines for the same queue:
   echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
 ```
 
-The `grep -v` removes all existing lines referencing this queue before appending the new ones, ensuring no duplicates.
+The `grep -v` removes all existing lines referencing this queue before appending new ones, preventing duplicates.
 
-## Queue Name → Schedule Name Inference
+## Queue Name to Schedule Name Inference
 
 When no queue name is given, infer from the schedule keyword:
 
@@ -65,3 +72,9 @@ When no queue name is given, infer from the schedule keyword:
 | "hourly" / "every hour" | `hourly` |
 | "nightly" / "night" | `nightly` |
 | no schedule | `basename` of current working directory |
+
+## Related
+
+- **SKILL.md** — tq overview, queue format, and command reference
+- **`references/session-naming.md`** — tmux session/window naming algorithm
+- Commands: `/schedule`, `/todo`, `/jobs`, `/pause`, `/unschedule`
