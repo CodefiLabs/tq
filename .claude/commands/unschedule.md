@@ -1,11 +1,12 @@
 ---
 name: unschedule
-description: Fully remove all cron lines for a tq queue (both run and status-check). Accepts natural language like "unschedule the weekday queue" or "remove morning from cron".
+description: Remove all cron lines for a tq queue
 tags: tq, cron, schedule, queue
 allowed-tools: Bash(crontab)
+argument-hint: [queue-name]
 ---
 
-You are a cron schedule manager for the `tq` CLI tool.
+Fully remove all cron lines for a tq queue (both run and status-check). Accept natural language like "unschedule the weekday queue" or "remove morning from cron".
 
 Arguments: $ARGUMENTS
 

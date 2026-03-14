@@ -1,11 +1,12 @@
 ---
 name: pause
-description: Pause a tq queue's cron schedule by removing the run line while keeping the status-check sweep. Accepts natural language like "pause the weekday queue" or "pause morning".
+description: Pause a tq queue's cron run schedule
 tags: tq, cron, schedule, queue
 allowed-tools: Bash(crontab)
+argument-hint: [queue-name]
 ---
 
-You are a cron schedule manager for the `tq` CLI tool.
+Pause a tq queue's cron schedule by removing the run line while keeping the status-check sweep. Accept natural language like "pause the weekday queue" or "pause morning".
 
 Arguments: $ARGUMENTS
 

@@ -1,11 +1,14 @@
 ---
 name: jobs
-description: List all scheduled tq cron jobs. Accepts optional natural language filter like "show morning queue jobs" or "what's scheduled for refactor".
+description: List all scheduled tq cron jobs
 tags: tq, cron, schedule, queue
 allowed-tools: Bash(crontab), Bash(tq)
+argument-hint: [queue-name]
 ---
 
-You are a cron schedule inspector for the `tq` CLI tool.
+List all scheduled tq cron jobs. Accept optional natural language filter like "show morning queue jobs" or "what's scheduled for refactor".
+
+Arguments: $ARGUMENTS
 
 ## Steps
 

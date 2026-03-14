@@ -1,13 +1,13 @@
 # tq Cron Expression Reference
 
-## Natural Language → Cron Mapping
+## Natural Language to Cron Mapping
 
 | Natural Language | Cron Expression | Notes |
 |-----------------|-----------------|-------|
 | "every morning" / "daily at 9am" | `0 9 * * *` | Default morning time |
 | "every night" / "nightly" | `0 22 * * *` | 10pm |
-| "every weekday" | `0 9 * * 1-5` | Mon–Fri at 9am |
-| "every weekday at 6pm" | `0 18 * * 1-5` | Mon–Fri at 6pm |
+| "every weekday" | `0 9 * * 1-5` | Mon-Fri at 9am |
+| "every weekday at 6pm" | `0 18 * * 1-5` | Mon-Fri at 6pm |
 | "every monday" / "weekly on mondays" | `0 9 * * 1` | 9am Monday |
 | "every monday at 8am" | `0 8 * * 1` | 8am Monday |
 | "every hour" / "hourly" | `0 * * * *` | Top of each hour |
@@ -42,7 +42,7 @@ Every scheduled queue gets two cron lines:
 
 ## Updating Crontab
 
-Replace existing lines for the same queue:
+Replace existing lines for the same queue by filtering out old entries before appending new ones:
 
 ```bash
 (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml"; \
@@ -50,9 +50,9 @@ Replace existing lines for the same queue:
   echo "*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
 ```
 
-The `grep -v` removes all existing lines referencing this queue before appending the new ones, ensuring no duplicates.
+The `grep -v` removes all existing lines referencing this queue before appending new ones, preventing duplicates.
 
-## Queue Name → Schedule Name Inference
+## Queue Name to Schedule Name Inference
 
 When no queue name is given, infer from the schedule keyword:
 
