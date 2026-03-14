@@ -1,6 +1,6 @@
 # tq — Task Queue for Claude
 
-A lightweight task queue runner that spawns Claude AI tasks as independent tmux sessions.
+A lightweight task queue runner and conversation manager that spawns Claude AI tasks as independent tmux sessions. Supports both one-off batch queues and persistent interactive conversations via Telegram.
 
 ## What It Does
 
@@ -216,6 +216,8 @@ Once installed, Claude can manage your task queues via slash commands:
 | `/health` | System-wide diagnostics |
 | `/setup-telegram` | Interactive wizard to configure Telegram notifications |
 | `/install` | Symlink tq binaries to PATH |
+| `/converse [start\|stop\|status]` | Manage Telegram conversation sessions |
+| `/tq-reply` | Send a response back to Telegram (used by Claude in conversation mode) |
 
 Claude will infer the queue name from context: "every morning" → `morning.yaml`, "daily" → `daily.yaml`, or the current directory's basename if no schedule keyword is present.
 
@@ -294,3 +296,98 @@ crontab -e
 Logs accumulate in `~/.tq/logs/tq.log`.
 
 See `skills/tq/references/cron-expressions.md` for a natural language → cron expression reference.
+
+## Conversation Mode (Telegram)
+
+Conversation mode enables interactive, back-and-forth conversations with Claude Code via Telegram. An orchestrator Claude session routes your messages to the appropriate conversation, automatically creating new sessions for new topics and resuming existing ones.
+
+### Setup
+
+1. Configure Telegram: run `/setup-telegram` in Claude Code (or `tq-setup`)
+2. Add the polling cron job:
+   ```bash
+   * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
+   ```
+
+### Starting Conversations
+
+Send `/converse` from Telegram (or run `tq-converse start` from CLI). This launches the orchestrator.
+
+Once the orchestrator is running, just send messages normally. The orchestrator will:
+- **New topic** → create a new conversation session with a descriptive slug (e.g., `fix-auth-bug`)
+- **Related to existing** → route to the appropriate session
+- **Telegram reply** → automatically route to the conversation that sent the original message
+- **Explicit routing** → prefix with `#slug-name` to target a specific session
+
+### Example Flow
+
+```
+You:     "fix the login bug in the auth module"
+tq:      [new: fix-auth] Started conversation: Fix login bug in auth module
+
+You:     "what did you find?"
+tq:      [fix-auth] Found 3 issues in src/auth.py: ...
+
+You:     "refactor the payment service to use Stripe v2"
+tq:      [new: refactor-payments] Started conversation: Refactor payment service for Stripe v2
+
+You:     #fix-auth "also check the password reset flow"
+tq:      [fix-auth] Checking password reset flow...
+```
+
+### Telegram Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/converse` | Start the orchestrator |
+| `/stop` | Stop the orchestrator |
+| `/stop <slug>` | Stop a specific conversation |
+| `/status` | Show all sessions |
+| `/list` | List active conversations |
+
+### How It Works
+
+1. **tq-telegram-poll** runs every minute via cron, fetches new Telegram messages
+2. **3-tier routing** determines where each message goes:
+   - Tier 1: Telegram reply → deterministic lookup via registry message ID mapping
+   - Tier 2: `#slug` prefix → route directly to named session
+   - Tier 3: Send to orchestrator Claude for smart routing
+3. **Orchestrator** (a persistent Claude Code session) reads the conversation registry, decides whether to route to an existing session or spawn a new one
+4. **Child sessions** (each a persistent Claude Code interactive session) process messages and respond via `/tq-reply`
+5. **Responses** are sent back to Telegram as threaded replies, with the session slug as a label
+
+### State
+
+Conversation state lives in `~/.tq/conversations/`:
+
+```
+~/.tq/conversations/
+├── registry.json           ← session registry (slugs, descriptions, message IDs)
+├── orchestrator/           ← orchestrator Claude settings and instructions
+│   ├── .tq-orchestrator.md
+│   ├── settings.json
+│   └── hooks/
+└── sessions/
+    ├── fix-auth/           ← per-session state
+    │   ├── .tq-converse.md
+    │   ├── settings.json
+    │   ├── current-slug
+    │   ├── reply-to-msg-id
+    │   ├── inbox/          ← received messages (timestamped)
+    │   └── outbox/         ← sent responses (timestamped)
+    └── refactor-payments/
+        └── ...
+```
+
+### CLI Commands
+
+```bash
+tq-converse start                    # start orchestrator
+tq-converse spawn <slug> [opts]      # create a child session
+tq-converse route <slug> <message>   # send to a session
+tq-converse send <message>           # send to orchestrator
+tq-converse list                     # list active sessions
+tq-converse status                   # show all session details
+tq-converse stop [<slug>]            # stop session or orchestrator
+tq-converse registry                 # dump the session registry
+```

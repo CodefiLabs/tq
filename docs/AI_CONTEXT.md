@@ -128,4 +128,59 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 ```
 
 This is required because cron runs with a minimal PATH that may not include Homebrew binaries
-(`tmux`, `python3`, `claude`). Do not remove this line.
+(`tmux`, `python3`, `claude`). Do not remove this line. All scripts (`tq`, `tq-converse`,
+`tq-message`, `tq-telegram-poll`) include this line.
+
+## Three State Locations (Not Two)
+
+With conversation mode, there are now **three** separate state locations:
+
+```
+<queue-dir>/.tq/<queue-basename>/<hash>      ← queue task state (status, session name)
+~/.tq/sessions/<hash>/settings.json          ← Claude session config (Stop hook path)
+~/.tq/conversations/                         ← conversation mode state (NEW)
+  ├── registry.json                          ← session registry + message ID map
+  ├── orchestrator/                          ← orchestrator Claude settings
+  └── sessions/<slug>/                       ← per-conversation state
+```
+
+Do not confuse these. Queue mode uses the first two. Conversation mode uses the third.
+
+## Conversation Mode Gotchas
+
+### Registry is the Source of Truth for Routing
+
+`~/.tq/conversations/registry.json` maps Telegram message IDs to session slugs and tracks
+session metadata. All routing decisions (reply threading, session lookup) depend on this file.
+Do not modify its format without updating both `tq-converse` (registry_op function) and
+`tq-telegram-poll` (lookup logic).
+
+### tmux Session Naming: Queue vs Conversation
+
+Queue mode sessions: `tq-<prompt-slug>-<epoch>` (e.g., `tq-fix-the-login-451234`)
+Conversation sessions: `tq-conv-<slug>` (e.g., `tq-conv-fix-auth`)
+Orchestrator session: `tq-orchestrator` (always this exact name)
+
+Never use hyphens that could collide with tmux's `:` separator in session:window targets.
+
+### Message Injection via tmux
+
+Messages are injected into Claude Code interactive sessions via `tmux load-buffer` +
+`tmux paste-buffer` (not `send-keys` for the message body). This avoids quoting issues
+with special characters in user messages. The `Enter` keystroke is sent separately via
+`tmux send-keys`.
+
+### The /tq-reply Slash Command Dependency Chain
+
+The response flow in conversation mode depends on Claude following instructions in
+`.tq-converse.md` to use `/tq-reply` after each response. If Claude doesn't call
+`/tq-reply`, the user won't receive a response on Telegram. The tmux session still
+has the full output — it's just not relayed.
+
+### Orchestrator Is a Claude Session (Not a Script)
+
+The orchestrator is a live Claude Code interactive session, not a deterministic script.
+It makes routing decisions based on its AI judgment. This means:
+- Routing is probabilistic for ambiguous messages (Tier 3)
+- The orchestrator can be slow to respond if Claude is thinking
+- If the orchestrator dies, send `/converse` from Telegram to restart it

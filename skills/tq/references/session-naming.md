@@ -48,3 +48,19 @@ WINDOW="$(echo "$PROMPT" | awk '{print $1" "$2}' \
 - Epoch suffix prevents collision when the same prompt is re-queued after a reset
 - tmux session names must not contain `.` or `:` — the character replacement handles this
 - The `-` separator between base and epoch is always present; if the base ends with `-`, it gets stripped first to avoid `--`
+
+## Conversation Mode Session Names
+
+Conversation sessions use a different naming scheme — slug-based, no epoch suffix:
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Orchestrator | `tq-orchestrator` (fixed) | `tq-orchestrator` |
+| Child session | `tq-conv-<slug>` | `tq-conv-fix-auth` |
+| Child window | `<slug>` | `fix-auth` |
+
+Slugs are short kebab-case names (2-4 words) chosen by the orchestrator Claude when a
+new conversation is created. Examples: `fix-auth-bug`, `refactor-api`, `update-docs`.
+
+Since there is no epoch suffix, conversation session names are unique by slug. Starting
+a session with an already-active slug will reuse the existing session.

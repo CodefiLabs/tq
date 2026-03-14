@@ -8,6 +8,7 @@ QUEUE_FILE=""
 MESSAGE_TEXT=""
 SESSION=""
 EXPLICIT_STATE_FILE=""
+REPLY_TO_MSG_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -16,15 +17,18 @@ while [[ $# -gt 0 ]]; do
     --message)    MESSAGE_TEXT="${2:-}";       shift 2 ;;
     --session)    SESSION="${2:-}";            shift 2 ;;
     --state-file) EXPLICIT_STATE_FILE="${2:-}"; shift 2 ;;
+    --reply-to)   REPLY_TO_MSG_ID="${2:-}";    shift 2 ;;
     --) shift; break ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *)  break ;;
   esac
 done
 
-if [[ -z "$TASK_HASH" && -z "$QUEUE_FILE" ]]; then
+# Allow --message without --task/--queue (conversation mode)
+if [[ -z "$TASK_HASH" && -z "$QUEUE_FILE" && -z "$MESSAGE_TEXT" ]]; then
   echo "Usage: tq-message --task <hash> --queue <file.yaml> [--message <text>] [--session <name>]" >&2
   echo "       tq-message --queue <file.yaml> [--message <text>]" >&2
+  echo "       tq-message --message <text> [--reply-to <msg_id>]" >&2
   exit 1
 fi
 
@@ -275,16 +279,50 @@ send_telegram() {
   local token="$1"
   local chat_id="$2"
   local text="$3"
+  local reply_to="${4:-}"
+
+  local curl_args=()
+  curl_args+=(-s -X POST "https://api.telegram.org/bot${token}/sendMessage")
+  curl_args+=(-d "chat_id=${chat_id}")
+  curl_args+=(--data-urlencode "text=${text}")
+  curl_args+=(-d "parse_mode=Markdown")
+
+  # Add reply threading if a reply_to message ID is provided
+  if [[ -n "$reply_to" ]]; then
+    curl_args+=(-d "reply_to_message_id=${reply_to}")
+    curl_args+=(-d "allow_sending_without_reply=true")
+  fi
 
   local response
-  response="$(curl -s -X POST \
-    "https://api.telegram.org/bot${token}/sendMessage" \
-    -d "chat_id=${chat_id}" \
-    --data-urlencode "text=${text}" \
-    -d "parse_mode=Markdown" 2>&1)"
+  response="$(curl "${curl_args[@]}" 2>&1)"
 
-  if echo "$response" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
-    echo "[tq-message] sent via Telegram"
+  # Extract the sent message ID for reply threading tracking
+  local sent_msg_id
+  sent_msg_id="$(echo "$response" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    if d.get('ok'):
+        print(d.get('result', {}).get('message_id', ''))
+    else:
+        sys.exit(1)
+except:
+    sys.exit(1)
+" 2>/dev/null || true)"
+
+  if [[ -n "$sent_msg_id" ]]; then
+    echo "[tq-message] sent via Telegram (msg_id=$sent_msg_id)"
+    # Track outgoing message ID in registry for reply threading
+    if [[ -n "$sent_msg_id" ]] && command -v tq-converse &>/dev/null; then
+      # Try to detect which slug this message belongs to
+      local slug_file="$HOME/.tq/conversations/latest-reply-slug"
+      if [[ -f "$slug_file" ]]; then
+        local slug
+        slug="$(cat "$slug_file")"
+        tq-converse track-msg "$slug" "$sent_msg_id" 2>/dev/null || true
+        rm -f "$slug_file"
+      fi
+    fi
   else
     echo "[tq-message] Telegram error: $response" >&2
     exit 1
@@ -294,8 +332,9 @@ send_telegram() {
 deliver() {
   local service="$1"
   local msg="$2"
+  local reply_to="${3:-}"
   case "$service" in
-    telegram) send_telegram "$TG_TOKEN" "$TG_CHAT" "$msg" ;;
+    telegram) send_telegram "$TG_TOKEN" "$TG_CHAT" "$msg" "$reply_to" ;;
     *) echo "[tq-message] unknown service: $service" >&2; exit 1 ;;
   esac
 }
@@ -337,5 +376,12 @@ fi
 
 # Deliver message if we have one
 if [[ -n "$MESSAGE_TEXT" ]]; then
-  deliver "$SERVICE" "$MESSAGE_TEXT"
+  # If no explicit reply-to, check for latest-msg-id (conversation mode)
+  if [[ -z "$REPLY_TO_MSG_ID" ]]; then
+    LATEST_MSG_FILE="$HOME/.tq/conversations/latest-msg-id"
+    if [[ -f "$LATEST_MSG_FILE" ]]; then
+      REPLY_TO_MSG_ID="$(cat "$LATEST_MSG_FILE")"
+    fi
+  fi
+  deliver "$SERVICE" "$MESSAGE_TEXT" "$REPLY_TO_MSG_ID"
 fi

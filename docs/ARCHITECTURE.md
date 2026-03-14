@@ -76,6 +76,27 @@ tq --status <queue.yaml>
 - Creates `~/.tq/queues/` and `~/.tq/logs/`
 - Prints example crontab lines on success
 
+### `scripts/tq-converse` — Conversation Manager
+- Subcommands: `start`, `spawn`, `route`, `send`, `stop`, `status`, `list`, `track-msg`, `lookup-msg`, `update-status`, `registry`
+- `start` launches the orchestrator (a persistent Claude Code interactive session in tmux)
+- `spawn <slug>` creates a child conversation session with its own tmux session, CLAUDE.md, and hooks
+- `route <slug> <message>` injects a message into a child session via `tmux load-buffer` + `paste-buffer`
+- Registry operations (embedded Python): JSON-based session and message ID tracking
+- Auth capture: same keychain pattern as `tq`
+
+### `scripts/tq-telegram-poll` — Telegram Message Router
+- Cron-driven (every minute): fetches updates from Telegram Bot API
+- Extracts `message_id`, `chat_id`, `reply_to_message_id`, and text
+- 3-tier routing: reply threading → #slug prefix → orchestrator
+- Handles Telegram commands: `/converse`, `/stop`, `/status`, `/list`
+- Falls back to `tq --prompt` (legacy one-off mode) when no orchestrator is running
+
+### `scripts/tq-message` — Notification Delivery
+- Delivers messages via Telegram (or Slack) with reply threading support
+- `--reply-to <msg_id>` threads responses under the user's original message
+- Tracks outgoing message IDs in the conversation registry for bidirectional threading
+- 3-layer config resolution: global config → queue YAML → env vars
+
 ### `skills/tq/SKILL.md` — Claude Plugin Skill
 - Consumed by the Claude model only, not by any script
 - Defines trigger phrases (when Claude activates this skill)
@@ -146,12 +167,103 @@ Reset: delete the state file → task returns to pending
 9. When Claude exits, the Stop hook fires: `on-stop.sh` runs `sed -i '' 's/^status=running/status=done/' <state-file>`
 10. Next run of `tq` sees `status=done` and skips the task
 
+## Conversation Mode Architecture
+
+```
+Telegram
+    │
+    ▼
+tq-telegram-poll (cron, every minute)
+    │
+    ├── Tier 1: reply_to_message_id in registry
+    │     └── tq-converse route <slug> <message>    deterministic
+    │
+    ├── Tier 2: message starts with #slug
+    │     └── tq-converse route <slug> <message>    deterministic
+    │
+    └── Tier 3: everything else
+          └── tq-converse send "[tq-msg msg_id=X chat_id=Y] message"
+                │
+                ▼
+          tq-orchestrator (persistent Claude Code session in tmux)
+                │
+                ├── reads ~/.tq/conversations/registry.json
+                ├── decides: existing session or new?
+                │
+                ├── existing → tq-converse route <slug> <message>
+                └── new      → tq-converse spawn <slug> --cwd <dir> --desc <desc>
+                               then tq-converse route <slug> <message>
+                                     │
+                                     ▼
+                               tq-conv-<slug> (child Claude Code session in tmux)
+                                     │
+                                     ├── Claude processes message
+                                     ├── uses /tq-reply slash command
+                                     │     └── tq-message --message "[slug] response" --reply-to <msg_id>
+                                     │           └── Telegram sendMessage (threaded reply)
+                                     └── outgoing msg_id tracked in registry
+```
+
+### Conversation State Layout
+
+```
+~/.tq/conversations/
+├── registry.json              session & message ID registry (JSON)
+├── latest-msg-id              last incoming Telegram message ID
+├── latest-chat-id             last incoming Telegram chat ID
+├── latest-reply-slug          slug marker for outgoing msg tracking
+├── orchestrator/
+│   ├── .tq-orchestrator.md    orchestrator instructions (Claude reads this)
+│   ├── settings.json          Claude hooks config
+│   └── hooks/
+│       ├── on-stop.sh         marks orchestrator stopped, notifies Telegram
+│       └── on-notification.sh forwards Claude notifications to Telegram
+└── sessions/
+    └── <slug>/
+        ├── .tq-converse.md    child session instructions (Claude reads this)
+        ├── settings.json      Claude hooks config
+        ├── current-slug       slug identifier file (read by /tq-reply)
+        ├── reply-to-msg-id    Telegram msg_id for reply threading
+        ├── inbox/             received messages (timestamped .txt files)
+        ├── outbox/            sent responses (timestamped .txt files)
+        └── hooks/
+            ├── on-stop.sh
+            └── on-notification.sh
+```
+
+### Registry Format
+
+```json
+{
+  "sessions": {
+    "fix-auth": {
+      "description": "Fix authentication bug in login module",
+      "tmux": "tq-conv-fix-auth",
+      "cwd": "/Users/kk/Sites/myproject",
+      "conv_dir": "/Users/kk/.tq/conversations/sessions/fix-auth",
+      "created": "2026-03-14T10:00:00",
+      "last_active": "2026-03-14T10:30:00",
+      "status": "active"
+    }
+  },
+  "messages": {
+    "12345": "fix-auth",
+    "12346": "fix-auth"
+  }
+}
+```
+
+The `messages` map tracks Telegram message IDs (both incoming and outgoing) → session slugs, enabling reply threading.
+
 ## Skill vs Scripts: Who Consumes What
 
 | Consumer | Consumes |
 |----------|---------- |
-| User (CLI) | `scripts/tq` (after install) |
+| User (CLI) | `scripts/tq`, `scripts/tq-converse` (after install) |
 | Claude (agent) | `skills/tq/SKILL.md` + `skills/tq/references/` |
-| Shell (cron) | `/opt/homebrew/bin/tq` (symlink) |
+| Shell (cron) | `/opt/homebrew/bin/tq`, `/opt/homebrew/bin/tq-telegram-poll` (symlinks) |
 | Claude per-task | `~/.tq/sessions/<hash>/settings.json` (hooks config) |
 | Claude Stop event | `~/.tq/sessions/<hash>/hooks/on-stop.sh` |
+| Claude orchestrator | `~/.tq/conversations/orchestrator/.tq-orchestrator.md` |
+| Claude conversation | `~/.tq/conversations/sessions/<slug>/.tq-converse.md` |
+| tq-telegram-poll | `~/.tq/conversations/registry.json` (message routing) |

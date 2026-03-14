@@ -39,6 +39,20 @@ Rules:
 No `.env` files currently exist, but the `.claude/settings.json` denies reading them anyway.
 If `.env` files are added in future, they must be in `.gitignore` immediately.
 
+## Conversation Mode Security
+
+The conversation registry (`~/.tq/conversations/registry.json`) contains session metadata
+but **no credentials**. However, the orchestrator and child sessions use the same
+`--dangerously-skip-permissions` flag as queue mode tasks.
+
+The Telegram bot token lives in `~/.tq/config/message.yaml`. This file should:
+- Never be committed to git
+- Never be shared or logged
+- Be readable only by the owning user
+
+Conversation session hooks (`~/.tq/conversations/sessions/<slug>/hooks/`) may contain
+paths that reference the user's home directory but do not contain credentials directly.
+
 ## Sensitive Path Reference
 
 | Path | Contains | Risk |
@@ -46,3 +60,6 @@ If `.env` files are added in future, they must be in `.gitignore` immediately.
 | `<queue-dir>/.tq/<name>/<hash>.launch.py` | Plaintext OAuth token | Do not commit or share |
 | `~/.tq/sessions/<hash>/settings.json` | Claude hook config | Low — no credentials |
 | `<queue-dir>/.tq/<name>/<hash>` | Task state (status only) | Low |
+| `~/.tq/config/message.yaml` | Telegram bot token, user ID | Do not commit or share |
+| `~/.tq/conversations/registry.json` | Session metadata, msg IDs | Low — no credentials |
+| `~/.tq/conversations/sessions/<slug>/` | Conversation state | Low — no credentials |

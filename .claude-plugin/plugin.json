@@ -1,7 +1,7 @@
 {
   "name": "tq",
-  "version": "1.0.0",
-  "description": "Task queue runner that spawns Claude AI tasks as independent tmux sessions.",
+  "version": "1.1.0",
+  "description": "Task queue runner and conversation manager for Claude AI via tmux and Telegram.",
   "author": {
     "name": "codefilabs",
     "url": "https://github.com/codefilabs/tq"
@@ -9,5 +9,5 @@
   "homepage": "https://github.com/codefilabs/tq",
   "repository": "https://github.com/codefilabs/tq",
   "license": "MIT",
-  "keywords": ["claude", "tmux", "task-queue", "automation"]
+  "keywords": ["claude", "tmux", "task-queue", "automation", "telegram", "conversation"]
 }

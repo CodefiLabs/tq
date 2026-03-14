@@ -5,6 +5,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 CONFIG_FILE="$HOME/.tq/config/message.yaml"
 OFFSET_FILE="$HOME/.tq/telegram-poll-offset"
+ORCHESTRATOR_SESSION="tq-orchestrator"
 
 # --- Read config ---
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -68,7 +69,7 @@ fi
 # --- Fetch updates ---
 UPDATES="$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${OFFSET}&limit=10&timeout=0" 2>&1)"
 
-# --- Process updates ---
+# --- Process updates (extract msg_id, chat_id, reply_to_msg_id, text) ---
 PROCESS_SCRIPT=$(mktemp /tmp/tq-poll-process-XXXXXX)
 trap 'rm -f "$CONFIG_SCRIPT" "$PROCESS_SCRIPT"' EXIT
 
@@ -100,8 +101,10 @@ for update in results:
     if text:
         chat_id = msg['chat']['id']
         message_id = msg['message_id']
-        # Output as tab-separated: chat_id<TAB>message_id<TAB>text
-        messages.append(f"{chat_id}\t{message_id}\t{text}")
+        # Extract reply_to_message_id if present
+        reply_to = msg.get('reply_to_message', {}).get('message_id', '')
+        # Output: chat_id<TAB>message_id<TAB>reply_to<TAB>text
+        messages.append(f"{chat_id}\t{message_id}\t{reply_to}\t{text}")
 
 if new_offset is not None:
     with open(offset_file, 'w') as f:
@@ -113,17 +116,166 @@ PYEOF
 
 MESSAGES="$(python3 "$PROCESS_SCRIPT" "$UPDATES" "$USER_ID" "$OFFSET_FILE")"
 
-# --- Spawn tq --prompt for each message ---
+# --- Check if orchestrator is running ---
+ORCHESTRATOR_ACTIVE=0
+if tmux has-session -t "$ORCHESTRATOR_SESSION" 2>/dev/null; then
+  ORCHESTRATOR_ACTIVE=1
+fi
+
+# --- Handle Telegram commands ---
+handle_command() {
+  local cmd="$1"
+  local chat_id="$2"
+
+  case "$cmd" in
+    /converse|/converse\ *)
+      if [[ "$ORCHESTRATOR_ACTIVE" == "1" ]]; then
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=Orchestrator already running. Just send messages — they'll be routed automatically." \
+          > /dev/null 2>&1 || true
+      else
+        if command -v tq-converse &>/dev/null; then
+          tq-converse start 2>&1 || true
+          ORCHESTRATOR_ACTIVE=1
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${chat_id}" \
+            --data-urlencode "text=Orchestrator started. Send messages and they'll be routed to the right conversation." \
+            > /dev/null 2>&1 || true
+        fi
+      fi
+      return 0
+      ;;
+    /stop)
+      if command -v tq-converse &>/dev/null; then
+        tq-converse stop 2>&1 || true
+        ORCHESTRATOR_ACTIVE=0
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=Orchestrator stopped." \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+    /stop\ *)
+      local SLUG="${cmd#/stop }"
+      if command -v tq-converse &>/dev/null; then
+        tq-converse stop "$SLUG" 2>&1 || true
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=Session '$SLUG' stopped." \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+    /status)
+      if command -v tq-converse &>/dev/null; then
+        local STATUS_TEXT
+        STATUS_TEXT="$(tq-converse status 2>&1 || true)"
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=${STATUS_TEXT}" \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+    /list)
+      if command -v tq-converse &>/dev/null; then
+        local LIST_TEXT
+        LIST_TEXT="$(tq-converse list 2>&1 || true)"
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${chat_id}" \
+          --data-urlencode "text=${LIST_TEXT}" \
+          > /dev/null 2>&1 || true
+      fi
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# --- Route messages ---
 mkdir -p "$HOME/.tq/workspace"
 
-while IFS=$'\t' read -r CHAT_ID MSG_ID MSG; do
-  if [[ -n "$MSG" ]]; then
-    echo "[tq-telegram-poll] prompt: ${MSG:0:60}"
-    # React with 👀 to acknowledge receipt
-    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setMessageReaction" \
-      -H "Content-Type: application/json" \
-      --data-raw "{\"chat_id\":${CHAT_ID},\"message_id\":${MSG_ID},\"reaction\":[{\"type\":\"emoji\",\"emoji\":\"👀\"}]}" \
-      > /dev/null 2>&1 || true
+while IFS=$'\t' read -r CHAT_ID MSG_ID REPLY_TO MSG; do
+  if [[ -z "$MSG" ]]; then
+    continue
+  fi
+
+  echo "[tq-telegram-poll] message: ${MSG:0:60}"
+
+  # React with 👀 to acknowledge receipt
+  curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setMessageReaction" \
+    -H "Content-Type: application/json" \
+    --data-raw "{\"chat_id\":${CHAT_ID},\"message_id\":${MSG_ID},\"reaction\":[{\"type\":\"emoji\",\"emoji\":\"👀\"}]}" \
+    > /dev/null 2>&1 || true
+
+  # Check for Telegram commands first
+  if [[ "$MSG" == /* ]]; then
+    if handle_command "$MSG" "$CHAT_ID"; then
+      continue
+    fi
+  fi
+
+  # --- Routing logic (3-tier) ---
+
+  # Store the latest message ID for reply threading
+  echo "$MSG_ID" > "$HOME/.tq/conversations/latest-msg-id" 2>/dev/null || true
+  echo "$CHAT_ID" > "$HOME/.tq/conversations/latest-chat-id" 2>/dev/null || true
+
+  ROUTED=0
+
+  # Tier 1: Telegram reply → deterministic routing via registry
+  if [[ -n "$REPLY_TO" && "$ORCHESTRATOR_ACTIVE" == "1" ]]; then
+    SLUG="$(tq-converse lookup-msg "$REPLY_TO" 2>/dev/null || true)"
+    if [[ -n "$SLUG" ]]; then
+      CHILD_SESSION="tq-conv-${SLUG}"
+      if tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+        echo "[tq-telegram-poll] reply-routing to: $SLUG (via msg $REPLY_TO)"
+        tq-converse track-msg "$SLUG" "$MSG_ID"
+        # Store msg_id for this session's reply threading
+        echo "$MSG_ID" > "$HOME/.tq/conversations/sessions/$SLUG/reply-to-msg-id" 2>/dev/null || true
+        tq-converse route "$SLUG" "$MSG"
+        ROUTED=1
+      fi
+    fi
+  fi
+
+  # Tier 2: Explicit #slug prefix → deterministic routing
+  if [[ "$ROUTED" == "0" && "$MSG" == \#* && "$ORCHESTRATOR_ACTIVE" == "1" ]]; then
+    # Extract slug from #slug-name prefix
+    SLUG="$(echo "$MSG" | sed 's/^#\([a-z0-9-]*\).*/\1/')"
+    ACTUAL_MSG="$(echo "$MSG" | sed 's/^#[a-z0-9-]* *//')"
+    if [[ -n "$SLUG" && -n "$ACTUAL_MSG" ]]; then
+      CHILD_SESSION="tq-conv-${SLUG}"
+      if tmux has-session -t "$CHILD_SESSION" 2>/dev/null; then
+        echo "[tq-telegram-poll] explicit routing to: $SLUG"
+        tq-converse track-msg "$SLUG" "$MSG_ID"
+        echo "$MSG_ID" > "$HOME/.tq/conversations/sessions/$SLUG/reply-to-msg-id" 2>/dev/null || true
+        tq-converse route "$SLUG" "$ACTUAL_MSG"
+        ROUTED=1
+      fi
+    fi
+  fi
+
+  # Tier 3: Orchestrator routing (smart, Claude-powered)
+  if [[ "$ROUTED" == "0" && "$ORCHESTRATOR_ACTIVE" == "1" ]]; then
+    echo "[tq-telegram-poll] routing via orchestrator"
+    # Format message with metadata for the orchestrator
+    FORMATTED_MSG="[tq-msg msg_id=${MSG_ID} chat_id=${CHAT_ID}"
+    if [[ -n "$REPLY_TO" ]]; then
+      FORMATTED_MSG="${FORMATTED_MSG} reply_to=${REPLY_TO}"
+    fi
+    FORMATTED_MSG="${FORMATTED_MSG}]
+${MSG}"
+    tq-converse send "$FORMATTED_MSG"
+    ROUTED=1
+  fi
+
+  # Fallback: no orchestrator — spawn one-off task (legacy behavior)
+  if [[ "$ROUTED" == "0" ]]; then
+    echo "[tq-telegram-poll] no orchestrator — spawning one-off task"
     tq --no-chrome --prompt "$MSG"
   fi
+
 done <<< "$MESSAGES"

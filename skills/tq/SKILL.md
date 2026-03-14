@@ -3,10 +3,11 @@ name: tq
 description: >
   This skill should be used when the user asks to "add to queue", "run queue", "queue these tasks",
   "schedule with tq", "tq status", "check task queue", "create a tq queue", "set up cron for tq",
-  "run claude in background", "batch prompts in tmux", or wants to manage Claude prompts running
-  in tmux sessions via the tq CLI tool. Triggers on phrases like "queue", "tq", "task queue",
-  "tmux queue", "scheduled claude tasks".
-version: 1.0.0
+  "run claude in background", "batch prompts in tmux", "start a conversation", "converse via telegram",
+  "telegram conversation mode", or wants to manage Claude prompts running in tmux sessions via the
+  tq CLI tool. Triggers on phrases like "queue", "tq", "task queue", "tmux queue", "scheduled claude tasks",
+  "conversation mode", "telegram chat", "converse".
+version: 1.1.0
 ---
 
 # tq — Claude Task Queue Runner
@@ -17,8 +18,9 @@ Installed to PATH via `/install`: `/opt/homebrew/bin/tq`
 
 ## Overview
 
-tq batches Claude prompts into YAML queue files and spawns each as an independent tmux session.
-Tasks are idempotent — running `tq` again skips `done` and live `running` tasks.
+tq manages Claude Code sessions via tmux in two modes:
+1. **Queue mode** — batches prompts into YAML queue files, spawns each as an independent tmux session. Idempotent — running `tq` again skips `done` and live `running` tasks.
+2. **Conversation mode** — persistent interactive Claude Code sessions orchestrated via Telegram. An orchestrator routes messages to the right conversation, creating new sessions or resuming existing ones.
 
 ## Queue File Format
 
@@ -59,6 +61,9 @@ Statuses: `pending` → `running` → `done`
 | `/jobs [filter]` | List all scheduled tq cron jobs |
 | `/health [queue]` | System-wide diagnostics |
 | `/install` | Symlink tq binaries to PATH |
+| `/converse [start\|stop\|status]` | Manage Telegram conversation sessions |
+| `/tq-reply` | Send response back to Telegram (conversation mode) |
+| `/setup-telegram` | Configure Telegram bot token and notifications |
 
 ## CLI Usage
 
@@ -101,6 +106,37 @@ If you need to interact with a Chrome profile that has a different Claude extens
 The Claude extension stores the browser name as `bridgeDisplayName` in the extension's `chrome.storage.local`. To set it for the first time on a profile:
 - Right-click the Claude extension icon in the Chrome toolbar → **Options**
 - Or open the sidepanel and look for a settings/gear icon with a name field
+
+## Conversation Mode
+
+Start an orchestrator: `tq-converse start` or send `/converse` from Telegram.
+
+The orchestrator routes incoming Telegram messages to the appropriate conversation session:
+- Telegram reply to a known message → routes to that session automatically
+- `#slug message` → routes to the named session
+- New topic → orchestrator spawns a new session with a descriptive slug
+
+Each conversation is a persistent Claude Code interactive session in its own tmux window.
+Child sessions use `/tq-reply` to send responses back to Telegram as threaded replies.
+
+### Conversation CLI
+
+```bash
+tq-converse start                         # start orchestrator
+tq-converse spawn <slug> --cwd <dir>      # new conversation session
+tq-converse route <slug> <message>        # send to a session
+tq-converse list                          # list active sessions
+tq-converse stop [<slug>]                 # stop session or orchestrator
+```
+
+### Telegram Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/converse` | Start the orchestrator |
+| `/stop [slug]` | Stop orchestrator or a specific session |
+| `/status` | Show all sessions |
+| `/list` | List active conversations |
 
 ## Additional Resources
 
