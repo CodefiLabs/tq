@@ -184,12 +184,10 @@ if [[ -n "\$SLUG" ]] && command -v tq-converse &>/dev/null; then
   tq-converse update-status "\$SLUG" stopped
 fi
 
-if command -v tq-message &>/dev/null; then
-  if [[ -n "\$SLUG" ]]; then
-    tq-message --message "[\$SLUG] Session ended."
-  else
-    tq-message --message "Orchestrator session ended."
-  fi
+if [[ -n "\$SLUG" ]]; then
+  echo "[tq-converse] session \$SLUG ended"
+else
+  echo "[tq-converse] orchestrator session ended"
 fi
 HOOKEOF
   chmod +x "$HOOKS_DIR/on-stop.sh"
@@ -200,9 +198,7 @@ HOOKEOF
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 NOTIFICATION="${1:-Claude Code notification}"
-if command -v tq-message &>/dev/null; then
-  tq-message --message "[notification] $NOTIFICATION"
-fi
+echo "[tq-converse] notification: $NOTIFICATION"
 HOOKEOF
   chmod +x "$HOOKS_DIR/on-notification.sh"
 
@@ -332,8 +328,7 @@ For each incoming message:
    ```bash
    tq-converse route <slug> '<message text>'
    ```
-   Then confirm to the user via /tq-reply:
-   `[→ slug-name] Routed your message.`
+   Do NOT use /tq-reply to confirm routing — the child session will reply directly.
 
    **To spawn a new session:**
    ```bash
@@ -343,8 +338,7 @@ For each incoming message:
    ```bash
    tq-converse route <slug> '<message text>'
    ```
-   Then tell the user via /tq-reply:
-   `[new: slug-name] Started conversation: <description>`
+   Do NOT use /tq-reply to confirm spawning — the child session will reply directly.
 
 4. **Track the Telegram message ID** so reply-threading works:
    ```bash
@@ -362,7 +356,7 @@ Pick short, descriptive kebab-case slugs (2-4 words):
 ## Rules
 
 - Always route or spawn — never answer the user's question yourself
-- Keep /tq-reply confirmations very short (one line)
+- Do NOT use /tq-reply for routing/spawning confirmations — only the child session replies
 - If the user says something like "in the auth thread" or "#fix-auth-bug", route to that slug
 - If a user asks to stop a session: `tq-converse stop <slug>`
 - If a user asks for status: run `tq-converse status` and share via /tq-reply
@@ -470,7 +464,9 @@ CONVEOF
   # Register in registry
   ensure_registry
   CREATED="$(date -u +%Y-%m-%dT%H:%M:%S)"
-  registry_op set "$SLUG" "$(python3 -c "
+  # NOTE: Must assign to variable first — bash brace expansion breaks
+  # {key: val, ...} when $(python3 -c ...) is used directly as a function argument
+  REG_JSON="$(python3 -c "
 import json, sys
 print(json.dumps({
     'description': sys.argv[1],
@@ -482,6 +478,7 @@ print(json.dumps({
     'status': 'active'
 }))
 " "$DESCRIPTION" "$CHILD_SESSION" "$CHILD_CWD" "$CONV_DIR" "$CREATED")"
+  registry_op set "$SLUG" "$REG_JSON"
 
   # Track triggering message if provided
   if [[ -n "$MSG_ID" ]]; then
