@@ -291,10 +291,21 @@ ${MSG}"
       ROUTED=1
     fi
 
-    # Fallback: no orchestrator — spawn one-off task (legacy behavior)
+    # Fallback: auto-start orchestrator and route through it
     if [[ "$ROUTED" == "0" ]]; then
-      echo "[tq-telegram-poll] no orchestrator — spawning one-off task"
-      tq --no-chrome --prompt "$MSG"
+      if command -v tq-converse &>/dev/null; then
+        echo "[tq-telegram-poll] auto-starting orchestrator"
+        tq-converse start 2>&1 || true
+        ORCHESTRATOR_ACTIVE=1
+        sleep 1
+        # Route through orchestrator
+        FORMATTED_MSG="[tq-msg msg_id=${MSG_ID} chat_id=${CHAT_ID}]
+${MSG}"
+        tq-converse send "$FORMATTED_MSG"
+      else
+        echo "[tq-telegram-poll] tq-converse not found — spawning one-off task"
+        tq --no-chrome --prompt "$MSG"
+      fi
     fi
 
   done <<< "$MESSAGES" || true
