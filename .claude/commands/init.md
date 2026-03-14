@@ -51,9 +51,6 @@ Write `~/.tq/workspace-map.md` with a markdown table (columns: project, path, ty
 
 ## Step 6 — Summary
 
-Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories.
+Report: number of directories scanned, projects found, paths to config and workspace map. Note that `workspace-map.md` is always overwritten (not merged) on each run. Warn if any scan directory yielded zero git repositories.
 
-Suggest next steps:
-- Re-run `/init` after adding new projects
-- Run `/install` to ensure tq binaries are on PATH
-- Run `/health` to verify the full system is operational
+Related: `/install` to ensure tq binaries are on PATH, `/health` to verify the full system, `/todo` to create queue tasks using the workspace map.

@@ -61,11 +61,22 @@ fi
 SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
 ```
 
+## Edge Cases
+
+| Input | Session Base | Reason |
+|-------|-------------|--------|
+| 1-word prompt: `deploy` | `deploy` | Uses the single word as-is |
+| 2-word prompt: `fix bug` | `fix-bug` | Uses both words (fewer than 3) |
+| Empty prompt | (empty string) | Produces `tq--<epoch>` — malformed; avoid empty prompts |
+| Special chars: `fix "the" bug!` | `fix-the-bug-` | Quotes and punctuation replaced with `-` |
+| Very long name field | Truncated to 20 chars | `cut -c1-20` limits length |
+
 ## Notes
 
 - The epoch suffix prevents collision when the same prompt is re-queued after a reset
 - tmux session names must not contain `.` or `:` -- the character replacement handles this
 - The `-` separator between base and epoch is always present; if the base ends with `-`, strip it first to avoid `--`
+- The `tail -c 6` approach for epoch suffix always produces 6 digits since Unix timestamps are 10+ digits
 
 ## Conversation Mode Session Names
 

@@ -18,7 +18,7 @@ If either is missing or malformed (hash not 8 hex chars, path not ending in `.ya
 
 ## 2. Write summary
 
-Write a rich, specific summary of what was accomplished:
+Review what was accomplished in this session (check recent tool calls, file changes, or tmux scrollback if context is unclear). Then write a rich, specific summary:
 - **Lead sentence**: state what was done + specific output (e.g. "Wrote a 106-line guide at docs/demo-video-tips.md")
 - **Numbered list**: 3-6 items of what was built/covered/fixed, each with a brief description after an em dash
 - Keep under 3500 characters (Telegram limit is 4096; leave room for prefix)

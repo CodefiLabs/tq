@@ -31,6 +31,11 @@ Arguments: $ARGUMENTS
    (crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml") | crontab -
    ```
 
-5. **Confirm removal**. Note that the queue file (`~/.tq/queues/<name>.yaml`) and task state are untouched -- only the cron schedule was removed.
+5. **Verify removal**:
+   ```bash
+   crontab -l 2>/dev/null | grep "/<name>\.yaml" || echo "(none -- removal confirmed)"
+   ```
+
+6. **Confirm**: Note that the queue file (`~/.tq/queues/<name>.yaml`) and task state are untouched -- only the cron schedule was removed.
 
 Related: `/schedule <name>` to reschedule, `/jobs` to verify removal.

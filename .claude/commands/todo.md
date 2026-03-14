@@ -1,7 +1,7 @@
 ---
 name: todo
 description: Add tasks to a tq queue with optional scheduling
-tags: tq, queue, tasks, schedule, tmux
+tags: tq, queue, tasks, schedule
 allowed-tools: Bash(pwd), Bash(cat), Bash(ls), Bash(mkdir), Bash(crontab), Read, Write
 argument-hint: [task description] [schedule]
 ---
@@ -49,18 +49,7 @@ Format must follow queue-format rules: required keys `cwd` and `tasks`, optional
 
 If no schedule language in `$ARGUMENTS`, skip to Step 6.
 
-Translate to cron expression (e.g. "every morning" -> `0 9 * * *`, "every weekday" -> `0 9 * * 1-5`, "nightly" -> `0 22 * * *`).
-
-Install cron entries (match on exact queue filename to avoid clobbering other queues):
-```bash
-mkdir -p ~/.tq/logs
-TQ_BIN="$(command -v tq)"
-(crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml"; \
-  echo "<cron> $TQ_BIN ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1"; \
-  echo "*/30 * * * * $TQ_BIN --status ~/.tq/queues/<name>.yaml >> ~/.tq/logs/tq.log 2>&1") | crontab -
-```
-
-Compute `reset:` TTL using the same rules as `/schedule` (see step 3 there). Insert before `cwd:` unless `reset:` already exists with a named value.
+Add `schedule:` to the queue YAML with the translated cron expression (e.g. "every morning" -> `"0 9 * * *"`). Then install cron entries using the same approach as `/schedule` — see that command's steps 3-7 for cron installation and reset TTL computation.
 
 ## Step 6 -- Confirm
 

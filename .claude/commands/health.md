@@ -70,3 +70,5 @@ workspace config      pass     32 projects cataloged
 ```
 
 Then show per-queue `tq --status` output beneath.
+
+Related: `/install` to fix missing binaries, `/setup-telegram` for Telegram config, `/init` for workspace config, `/converse start` to restart orchestrator.

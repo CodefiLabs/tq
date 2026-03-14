@@ -6,6 +6,8 @@ allowed-tools: Bash(shellcheck), Bash(git:*), Bash(ls)
 argument-hint: (no arguments)
 ---
 
+Arguments: $ARGUMENTS
+
 Review staged changes for correctness, style, and security before committing.
 
 1. Check for staged changes first:
@@ -19,7 +21,7 @@ Review staged changes for correctness, style, and security before committing.
    ls scripts/tq* | xargs shellcheck
    ```
    If shellcheck is not installed, warn and skip this step.
-   Report any warnings before proceeding.
+   Report any warnings before proceeding. Shellcheck warnings do not block the review — report them and continue.
 
 3. Show the staged diff:
    ```bash
@@ -37,3 +39,5 @@ Review staged changes for correctness, style, and security before committing.
    - Temp files cleaned via `trap ... EXIT`
 
 5. Summarize findings as a numbered list. For each issue, state the file, line, and suggested fix. If no issues found, confirm the changes look clean.
+
+Related: `/health` for system diagnostics, `/install` to re-link scripts after changes.

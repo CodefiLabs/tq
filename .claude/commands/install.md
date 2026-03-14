@@ -32,6 +32,9 @@ Install all tq CLI tools by running the install script and verifying the result.
    ls -la "$(which tq)"
    ```
 
-5. Report the install location and which scripts were linked. If any binary is missing from PATH, warn the user.
+5. Report the install location and which scripts were linked. If any binary is missing from PATH, warn the user. If the install failed with a permission error, suggest using `TQ_INSTALL_DIR` to target a writable directory:
+   ```bash
+   TQ_INSTALL_DIR=/usr/local/bin bash "$(git rev-parse --show-toplevel)/scripts/tq-install.sh"
+   ```
 
 Related: `/health` to verify full system status, `/setup-telegram` to configure Telegram integration.

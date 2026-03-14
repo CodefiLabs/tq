@@ -11,7 +11,7 @@ description: >
   in tmux sessions via the tq CLI tool. Triggers on phrases like "queue", "tq", "task queue",
   "tmux queue", "scheduled claude tasks", "conversation mode", "telegram chat", "converse",
   "telegram session", "poll telegram", "tq-converse", "tq-message", "task notification".
-version: 1.4.0
+version: 1.5.0
 ---
 
 # tq -- Claude Task Queue Runner
@@ -155,6 +155,17 @@ tq-converse stop [<slug>]                 # stop session or orchestrator
 | `tq-telegram-poll` | Long-polls Telegram, routes messages via 3-tier routing |
 | `tq-telegram-watchdog` | Ensures poll cron entry exists |
 | `tq-message` | Sends notifications (Telegram/Slack) on task completion |
+
+## Troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| Tasks stuck in `running` | tmux session died | Run `tq --status <queue>` to reap dead sessions |
+| `tq` command not found | Not installed to PATH | Run `/install` |
+| Queue runs but nothing happens | All tasks already `done` | Delete state: `rm -rf <queue-dir>/.tq/<name>/` |
+| Cron not firing | `tq-cron-sync` not running or schedule missing | Check `crontab -l \| grep tq` and add `schedule:` to queue YAML |
+| Telegram messages not routing | Orchestrator not running | Run `/converse start` |
+| Malformed YAML | Parser does not support anchors | Use only `cwd`, `tasks`, `schedule`, `reset`, `message` top-level keys |
 
 ## Additional Resources
 
