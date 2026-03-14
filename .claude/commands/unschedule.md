@@ -1,31 +1,36 @@
 ---
 name: unschedule
-description: Fully remove all cron lines for a tq queue (both run and status-check). Accepts natural language like "unschedule the weekday queue" or "remove morning from cron".
+description: Remove cron schedule for a tq queue
 tags: tq, cron, schedule, queue
 allowed-tools: Bash(crontab)
+argument-hint: [queue-name]
 ---
 
-You are a cron schedule manager for the `tq` CLI tool.
+Remove all cron lines (both run and status-check) for a tq queue. Accepts natural language like "unschedule the weekday queue" or "remove morning from cron".
 
 Arguments: $ARGUMENTS
 
 ## Steps
 
-1. **Infer the queue name** from `$ARGUMENTS` (e.g. "the weekday queue" → `weekday`, "morning" → `morning`).
-   If no queue name is given, list all tq cron lines and ask which to remove.
+1. **Infer the queue name** from `$ARGUMENTS` (e.g. "the weekday queue" -> `weekday`, "morning" -> `morning`).
+   If no queue name given, list all tq cron lines (`crontab -l 2>/dev/null | grep '/tq '`) and ask which to remove.
 
 2. **Read current crontab**:
    ```bash
    crontab -l 2>/dev/null || echo "(no crontab)"
    ```
 
-3. **Find all tq lines** for this queue (both `tq` run and `tq --status`).
-   If none found, say "No cron schedule found for `<name>` queue."
-
-4. **Remove all lines** referencing this queue:
+3. **Find matching tq lines** for this queue. Match the exact queue filename to avoid false positives (e.g. "morning" must not remove "morning-review"):
    ```bash
-   (crontab -l 2>/dev/null | grep -v "tq.*<name>.yaml") | crontab -
+   crontab -l 2>/dev/null | grep "tq.*/<name>\.yaml"
+   ```
+   If none found, say "No cron schedule found for `<name>` queue." and stop.
+
+4. **Show what will be removed** and the lines being kept. Then remove:
+   ```bash
+   (crontab -l 2>/dev/null | grep -v "tq.*/<name>\.yaml") | crontab -
    ```
 
-5. **Confirm**: Show what was removed. Note that the queue file and task state are untouched —
-   only the cron schedule was removed. Suggest `/schedule <name>` to reschedule.
+5. **Confirm removal**. Note that the queue file (`~/.tq/queues/<name>.yaml`) and task state are untouched -- only the cron schedule was removed.
+
+Related: `/schedule <name>` to reschedule, `/jobs` to verify removal.
