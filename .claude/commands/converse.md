@@ -1,8 +1,8 @@
 ---
 name: converse
 description: Manage Telegram conversation sessions
-tags: tq, telegram, conversation, orchestrator
-allowed-tools: Bash(tq-converse), Bash(which)
+tags: tq, telegram, conversation, orchestrator, sessions
+allowed-tools: Bash(tq-converse), Bash(which), Bash(tmux), Bash(test)
 argument-hint: "[start|stop|status|list|spawn <slug>]"
 ---
 
@@ -10,24 +10,58 @@ Arguments: $ARGUMENTS
 
 Manage Telegram conversation sessions via `tq-converse`.
 
-1. Verify `tq-converse` is installed:
-   ```bash
-   which tq-converse
-   ```
-   If missing, suggest running `/install` first and stop.
+## 1. Verify binary
 
-2. Parse the arguments according to these subcommands:
-   - No arguments or `start`: start the orchestrator (`tq-converse start`)
-   - `stop`: stop the orchestrator (`tq-converse stop`)
-   - `stop <slug>`: stop a specific conversation session (`tq-converse stop <slug>`)
-   - `status`: show all session statuses (`tq-converse status`)
-   - `list`: list active conversation slugs (`tq-converse list`)
-   - `spawn <slug> [--cwd <dir>] [--desc <desc>]`: create a new child session (`tq-converse spawn <slug> ...`)
+```bash
+which tq-converse
+```
+If missing, stop: "Run `/install` to set up tq binaries."
 
-3. If the arguments do not match any subcommand above, report the available subcommands and stop.
+## 2. Parse and dispatch
 
-4. Run the corresponding command. If it exits non-zero, report the error output.
+| `$ARGUMENTS` | Command | Purpose |
+|--------------|---------|---------|
+| (none) or `start` | `tq-converse start` | Launch orchestrator |
+| `stop` | `tq-converse stop` | Stop orchestrator |
+| `stop <slug>` | `tq-converse stop <slug>` | Stop one session |
+| `status` | `tq-converse status` | Show all session statuses |
+| `list` | `tq-converse list` | List active slugs |
+| `spawn <slug> [opts]` | `tq-converse spawn <slug> [--cwd <dir>] [--desc <desc>]` | Create child session |
 
-5. Display the command output to the user.
+If `$ARGUMENTS` doesn't match any subcommand, show the table above and stop.
 
-Related: `/setup-telegram` to configure Telegram bot, `/pause` and `/schedule` for queue scheduling.
+## 3. Edge cases
+
+- `start` when orchestrator already running: report "Orchestrator already active" and show status instead
+- `stop <slug>` when slug not found: report "No session `<slug>` found" and list active sessions
+- `spawn` without a slug: stop with "Usage: `/converse spawn <slug> [--cwd <dir>] [--desc <desc>]`"
+- Telegram not configured (`~/.tq/config/message.yaml` missing): warn "Telegram not configured — run `/setup-telegram` first" but proceed (conversation mode works without Telegram for local-only use)
+
+## 4. Execute
+
+Run the matched command. If exit code is non-zero, report the error output and stop.
+
+## 5. Verify (for start/spawn)
+
+After `start`: confirm orchestrator tmux session exists:
+```bash
+tmux has-session -t tq-orchestrator 2>/dev/null && echo "Orchestrator running" || echo "FAILED to start"
+```
+
+After `spawn`: confirm child session:
+```bash
+tmux has-session -t "tq-conv-<slug>" 2>/dev/null && echo "Session active" || echo "FAILED to spawn"
+```
+
+## 6. Display output
+
+Show a summary table:
+
+| Item | Value |
+|------|-------|
+| Action | `start` / `stop` / `status` / `list` / `spawn` |
+| Result | success or error message |
+| Session | tmux session name (if applicable) |
+| Active sessions | count (for `status` / `list`) |
+
+Related: `/setup-telegram` for bot setup, `/tq-reply` for session replies, `/health` for diagnostics.

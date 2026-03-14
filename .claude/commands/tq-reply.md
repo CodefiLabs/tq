@@ -1,69 +1,53 @@
 ---
 name: tq-reply
-description: Reply to Telegram user from conversation session
+description: Reply to Telegram from conversation session
 tags: tq, telegram, conversation, reply
-allowed-tools: Bash(tq-message),Bash(tq-converse),Bash(cat),Bash(mkdir),Bash(date)
+allowed-tools: Bash(tq-message), Bash(mkdir), Bash(date), Bash(tmux), Read, Write
+argument-hint: "(no args -- auto-detects slug)"
 ---
 
 Arguments: $ARGUMENTS
 
-No arguments needed -- the conversation slug is auto-detected from the current tmux session.
+Send the current response back to the Telegram user. No arguments needed.
 
 ## 1. Detect conversation slug
 
-Find which conversation this Claude instance belongs to by matching the tmux session name against registered slugs:
+Use the Read tool to read `.tq-converse.md` in the current directory. The marker is written by `tq-converse` when spawning the session and contains a line like `Your conversation slug is: **<slug>**`. Extract the slug from between the `**` markers.
 
+Fallback: get the current tmux session name and derive the slug:
 ```bash
-SLUG=""
-for DIR in "$HOME/.tq/conversations/sessions"/*/; do
-  [[ -f "$DIR/current-slug" ]] || continue
-  CANDIDATE="$(cat "$DIR/current-slug")"
-  SESSION="tq-conv-${CANDIDATE}"
-  if tmux display-message -p '#{session_name}' 2>/dev/null | grep -qF "$SESSION"; then
-    SLUG="$CANDIDATE"
-    break
-  fi
-done
-echo "Slug: $SLUG"
+tmux display-message -p '#{session_name}' 2>/dev/null
 ```
+If session name matches `tq-conv-<slug>`, extract `<slug>` by stripping the `tq-conv-` prefix.
 
-If SLUG is empty, stop and report: "Could not detect conversation slug. This command must run inside a `tq-conv-*` tmux session."
+If SLUG is empty, stop: "Could not detect conversation slug. Run this inside a `tq-conv-*` session or ensure `.tq-converse.md` exists."
 
 ## 2. Write the response
 
-Write a concise, Telegram-friendly response based on what was just accomplished or answered:
-- Lead with the answer or result
-- Use Telegram Markdown (`*bold*`, `_italic_`, `` `code` ``)
-- Keep under 3500 characters (Telegram limit is 4096; slug prefix takes space)
-- No filler ("I successfully...", "Sure, I can...")
+Write a concise Telegram-friendly response:
+- Lead with the answer, not reasoning
+- Telegram Markdown: `*bold*`, `_italic_`, `` `code` ``
+- Max 3500 chars (4096 limit minus slug prefix)
+- No filler phrases
 
-Store the response text mentally -- it will be used in steps 3 and 4.
+## 3. Save and send
 
-## 3. Look up reply-to ID and save to outbox
+Set `SLUG_DIR="$HOME/.tq/conversations/sessions/$SLUG"`.
+
+Use Read to check `$SLUG_DIR/reply-to-msg-id`. If it exists, capture the message ID as `REPLY_TO`.
 
 ```bash
-SLUG_DIR="$HOME/.tq/conversations/sessions/$SLUG"
-REPLY_TO=""
-if [[ -f "$SLUG_DIR/reply-to-msg-id" ]]; then
-  REPLY_TO="$(cat "$SLUG_DIR/reply-to-msg-id")"
-fi
-
 mkdir -p "$SLUG_DIR/outbox"
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 ```
 
-Write the response text to `$SLUG_DIR/outbox/${TIMESTAMP}.txt` for audit.
+Use Write to save the slug to `$SLUG_DIR/current-slug` and `$HOME/.tq/conversations/latest-reply-slug`.
 
-## 4. Send via tq-message
+Use Write to save the response to `$SLUG_DIR/outbox/<timestamp>.txt` (use `date +%Y%m%d-%H%M%S` for the filename). Then send:
 
 ```bash
-echo "$SLUG" > "$HOME/.tq/conversations/latest-reply-slug"
-RESPONSE='<response text here>'
-tq-message --message "[$SLUG] $RESPONSE" --reply-to "$REPLY_TO"
+tq-message --message "[$SLUG] <response>" --reply-to "$REPLY_TO"
 ```
 
-If `tq-message` exits non-zero, report the error.
+If `tq-message` exits non-zero, report the error and stop.
 
-Do not explain what you are doing. Write the response and run the commands.
-
-> Related: `/tq-message` (queue task summaries), `/converse` (manage sessions)
+Related: `/tq-message` (queue summaries), `/converse` (manage sessions)

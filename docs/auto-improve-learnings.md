@@ -120,3 +120,82 @@ Applied multi-criteria, multi-perspective scoring adapted from the vibeathon AI 
 15. **setup-telegram was the worst-scoring command** -- Security violations (no chmod 600), no overwrite protection on config, and no binary validation. Multi-perspective scoring surfaced all three independently.
 16. **Technical accuracy in references is higher-leverage than prose quality** -- session-naming.md had beautiful formatting but was producing wrong session names (missing tq- prefix). The formatting score didn't help if the content was wrong.
 17. **tq-reply remains the lowest-scoring command** -- Its inline slug detection loop is a code smell that scoring can't fix. Needs a `tq-converse detect-slug` subcommand to simplify.
+
+### Iterations 3-8 — 2026-03-14 (Lead-driven targeted rewrites)
+
+Focused on bottom-up rewrites of the weakest files, then progressive polish upward.
+See [docs/progress/iterations-3-8.md](progress/iterations-3-8.md) for details.
+
+**Key changes**: tq-reply.md complete rewrite (marker file detection), chrome-integration.md restructure (tables, troubleshooting), review.md (--fix flag, priority table), install.md (--check mode), init.md (--refresh flag), SKILL.md troubleshooting table.
+
+### Iterations 9-14 — 2026-03-14 (Systematic cross-cutting improvements)
+
+6 themed iterations run by a parallel agent. See [docs/progress/iterations-9-14.md](progress/iterations-9-14.md).
+
+| Iteration | Theme | Impact |
+|-----------|-------|--------|
+| 9 | Cross-reference consistency | All 17 files now form complete navigation rings |
+| 10 | Error handling completeness | Every command has explicit stop/continue semantics |
+| 11 | Argument validation | All argument-hint values quoted, consistent `[]`/`<>` |
+| 12 | LLM executability | All 13 commands use `## N. Title` heading format |
+| 13 | Tool permission scoping | No command has unused tool permissions |
+| 14 | Output format standardization | 11 of 13 commands have table-format output |
+
+**Learnings accumulated (iterations 9-14):**
+
+18. **Navigation rings need auditing from both directions** -- checking A→B is not enough; B→A must also exist.
+19. **"Stop" vs "continue" must be explicit** -- LLMs will guess at error handling. Even "never stop" (health.md) is valuable.
+20. **Argument-hint quoting compounds** -- one unquoted file sets a bad pattern. Fix all at once.
+21. **`## N. Title` H2 headings beat numbered bold items** -- LLMs treat H2s as structural boundaries.
+22. **Tool permission bloat is a security concern** -- unused tools can lead to unexpected behavior.
+23. **Output tables create user expectation consistency** -- predictable output format across all commands.
+
+### Iterations 15-22 — 2026-03-14 (Final polish and ceiling push)
+
+8 themed iterations run by a parallel agent. See [docs/progress/iterations-15-22.md](progress/iterations-15-22.md).
+
+| Iteration | Theme | Impact |
+|-----------|-------|--------|
+| 15 | Trigger phrase coverage | SKILL.md gained 20+ natural phrasings |
+| 16 | Security & permissions | Token masking, python3 tool added |
+| 17 | System perspective | Fixed macOS `grep -oP` bug (GNU-only) |
+| 18 | Edge case handling | Converse/tq-message gained edge case sections |
+| 19 | Progressive disclosure | Schedule TTL table simplified |
+| 20 | Word count optimization | SKILL.md queue inference condensed |
+| 21 | Heading consistency | All commands use `## N.` format |
+| 22 | Ceiling test | Tags, tools, error stops for 7 files |
+
+**Learnings accumulated (iterations 15-22):**
+
+24. **`grep -oP` is GNU-only** -- critical macOS bug. Use `sed -n 's/.../p'` for portable extraction.
+25. **allowed-tools must match every bash command used** -- `grep` in pipes needs `Bash(grep)`, `python3` needs `Bash(python3)`.
+26. **Trigger phrases compound value** -- 20+ natural phrasings cover the long tail of user intent.
+27. **Heading format consistency reduces cognitive friction** -- standardize across all files.
+28. **Edge case coverage is the highest-ROI improvement** -- 2-3 lines prevent entire failure modes.
+29. **Security notes earn high impact scores** -- one "never echo token in full" line is +3 impact.
+30. **allowed-tools gaps cause silent failures** -- Claude works around missing permissions poorly.
+31. **Strong files yield diminishing returns** -- focus iterations on weakest files for maximum impact.
+
+## Cumulative Score Trajectory
+
+| Stage | Average Score | Method |
+|-------|--------------|--------|
+| Pre-iteration 1 | 5.4/10 | Simple 0-10 rubric |
+| Post-iteration 1 | 8.6/10 | Simple 0-10 rubric |
+| Post-iteration 2 | 80.6/100 | Vibeathon rubric |
+| Post-iteration 8 | ~82/100 | Vibeathon rubric (estimated) |
+| Post-iteration 14 | ~83/100 | Vibeathon rubric (agent scored) |
+| Post-iteration 22 | 81.1/100 | Vibeathon rubric (agent scored) |
+
+**Note**: Score averages from different agents aren't directly comparable due to calibration differences. The key metric is within-agent delta, not absolute score.
+
+## Final Score Distribution (Iteration 22)
+
+| Range | Files | Names |
+|-------|-------|-------|
+| 85-90 | 3 | SKILL.md (88), health.md (87), setup-telegram.md (85), install.md (85) |
+| 80-84 | 6 | converse.md (84), schedule.md (83), review.md (82), tq-reply.md (82), todo.md (81), session-naming.md (81) |
+| 78-80 | 5 | pause.md (80), unschedule.md (80), tq-message.md (80), cron-expressions.md (80), init.md (79) |
+| 74-77 | 2 | jobs.md (78), chrome-integration.md (74) |
+
+**Total improvements made**: 120+ individual edits across 17 files over 22 iterations.

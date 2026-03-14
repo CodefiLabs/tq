@@ -2,16 +2,23 @@
 name: tq
 description: >
   This skill should be used when the user asks to "add to queue", "run queue", "queue these tasks",
-  "schedule with tq", "tq status", "check task queue", "create a tq queue", "set up cron for tq",
-  "run claude in background", "batch prompts in tmux", "start a conversation", "start conversation mode",
+  "schedule with tq", "tq status", "check task queue", "check queue status", "create a tq queue",
+  "set up cron for tq", "run claude in background", "batch prompts in tmux",
+  "background claude sessions", "headless claude", "automate claude tasks",
+  "schedule claude tasks", "start a conversation", "start conversation mode",
   "converse via telegram", "telegram conversation mode", "telegram bot", "message routing",
-  "route a message", "spawn a session", "orchestrator", "reset tasks", "reset queue",
-  "notify on completion", "tq notification", "tq health", "check tq health", "tq setup",
-  "setup telegram bot", "tq install", or wants to manage Claude prompts running
+  "route a message", "spawn a session", "list conversations", "stop conversation",
+  "stop session", "orchestrator", "reset tasks", "reset queue", "clear task state",
+  "notify on completion", "tq notification", "send telegram message", "reply via telegram",
+  "tq health", "check tq health", "what's running", "what tasks are done",
+  "tq setup", "setup telegram bot", "tq install", "pause schedule", "resume schedule",
+  "remove from cron", "unschedule queue", "lint tq scripts", "review tq changes",
+  "configure workspaces", "workspace setup", or wants to manage Claude prompts running
   in tmux sessions via the tq CLI tool. Triggers on phrases like "queue", "tq", "task queue",
   "tmux queue", "scheduled claude tasks", "conversation mode", "telegram chat", "converse",
-  "telegram session", "poll telegram", "tq-converse", "tq-message", "task notification".
-version: 1.3.0
+  "telegram session", "poll telegram", "tq-converse", "tq-message", "task notification",
+  "cron job", "tmux session", "queue file", "queue yaml".
+version: 1.4.0
 ---
 
 # tq -- Claude Task Queue Runner
@@ -44,7 +51,7 @@ tasks:
   - prompt: write unit tests for payment module
 ```
 
-Queue files are read-only -- tq never modifies them.
+Queue files are read-only — tq never modifies them. Create/update queues via `/todo`.
 
 ### Reset Modes
 
@@ -113,14 +120,11 @@ See `references/cron-expressions.md` for natural language to cron mapping.
 
 ## Queue Name Inference
 
-When using `/todo` without an explicit queue name:
+When `/todo` has no explicit queue name: derive from schedule keyword ("every morning" -> `morning`, "daily" -> `daily`) or fall back to `basename` of cwd.
 
-- Schedule keyword present -> derive from it: "every morning" -> `morning`, "daily" -> `daily`, "weekly" -> `weekly`
-- No schedule -> use `basename` of current working directory
+## Resetting State
 
-## Reset
-
-- One task: delete its state file from `.tq/<queue-basename>/`
+- One task: `rm .tq/<queue-basename>/<hash>`
 - Entire queue: `rm -rf ~/.tq/queues/.tq/<queue-basename>/`
 
 ## Conversation Mode
@@ -156,8 +160,18 @@ tq-converse stop [<slug>]                 # stop session or orchestrator
 | `tq-telegram-watchdog` | Ensures poll cron entry exists |
 | `tq-message` | Sends notifications (Telegram/Slack) on task completion |
 
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Tasks stuck in `running` | tmux session died | `tq --status <queue>` reaps dead sessions |
+| Same task re-runs after `done` | Prompt text changed (new hash) | Delete old state: `rm .tq/<queue>/<old-hash>` |
+| Cron not firing | Missing crontab entry | `/schedule <queue> <time>` or check `tq-cron-sync` |
+| Telegram messages not routing | Poll not running | `/health` → check poll cron |
+| Chrome not connecting | Wrong profile or extension missing | See `references/chrome-integration.md` |
+
 ## Additional Resources
 
-- **`references/session-naming.md`** -- session/window name generation algorithm and examples
-- **`references/cron-expressions.md`** -- natural language to cron expression mapping table
-- **`references/chrome-integration.md`** -- Chrome `--chrome` flag, profile setup, and browser configuration
+- **`references/session-naming.md`** — session/window name algorithm and examples
+- **`references/cron-expressions.md`** — natural language to cron mapping table
+- **`references/chrome-integration.md`** — Chrome `--chrome` flag, profile setup, troubleshooting

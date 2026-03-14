@@ -1,59 +1,82 @@
 ---
 name: init
 description: Configure workspace dirs and catalog projects
-tags: tq, setup, init, workspaces
-allowed-tools: Bash(cat), Bash(find), Bash(ls), Bash(mkdir), Bash(test), Read, Write
-argument-hint: [workspace-dirs...]
+tags: tq, setup, init, workspaces, catalog, projects, scan
+allowed-tools: Bash(find), Bash(ls), Bash(mkdir), Bash(test), Read, Write
+argument-hint: "[dir1 dir2 ...] or [--refresh]"
 ---
 
 Arguments: $ARGUMENTS
 
-Initialize tq by configuring workspace directories and scanning them to build a project catalog for queue task creation.
+Initialize tq workspace configuration and build a project catalog.
 
-## Step 1 — Read existing workspaces config
+## 1. Check existing config
 
-Read `~/.tq/config/workspaces.yaml`. If it exists, show the current `scan_dirs` list.
+Read `~/.tq/config/workspaces.yaml`. If it exists, show the current `scan_dirs`.
 
-## Step 2 — Confirm or collect workspace directories
+If `$ARGUMENTS` is `--refresh`, skip to step 4 (re-scan with existing dirs).
 
-- If `$ARGUMENTS` contains directory paths, use those directly.
-- If no config exists and no arguments, ask the user which directories to scan (suggest `~/Sites`, `~/Projects`, `~/code`, `~/.tq/workspace`).
-- If config exists and no arguments, show current dirs and ask to keep or replace.
+## 2. Collect workspace directories
 
-Resolve all paths to absolute (expand `~`). Always include `~/.tq/workspace` unless explicitly excluded. Create it with `mkdir -p` if needed.
+| Condition | Action |
+|-----------|--------|
+| `$ARGUMENTS` has paths | Use those paths |
+| No config, no args | Ask user; suggest `~/Sites`, `~/Projects`, `~/code` |
+| Config exists, no args | Show current dirs, ask to keep or replace |
 
-Validate each directory exists (`test -d`). If a directory does not exist, warn the user and ask whether to create it or skip it.
+Resolve all paths to absolute (expand `~`). Always include `~/.tq/workspace`.
 
-## Step 3 — Write workspaces config
+Validate each with `test -d`. If missing, ask: create it or skip it? If all paths are invalid after validation, stop: "No valid directories to scan."
 
-Run `mkdir -p ~/.tq/config`, then write `~/.tq/config/workspaces.yaml`:
+## 3. Write config
 
+```bash
+mkdir -p ~/.tq/config ~/.tq/workspace
+```
+
+Write `~/.tq/config/workspaces.yaml`:
 ```yaml
 # tq workspace directories — machine-local config.
-# Edit this file, then re-run /init to refresh the project map.
+# Re-run /init --refresh to rebuild the project map.
 scan_dirs:
   - /absolute/path/one
   - /absolute/path/two
 ```
 
-## Step 4 — Scan for projects
+## 4. Scan for projects
 
-For each directory in `scan_dirs`, find git repositories (max 4 levels deep):
+For each dir in `scan_dirs`, find git repos (max 4 levels):
 ```bash
 find /absolute/path -maxdepth 4 -name ".git" -type d 2>/dev/null | sed 's|/.git$||' | sort
 ```
 
-Detect project type by checking for marker files (`package.json` -> node, `Cargo.toml` -> rust, `artisan`/`composer.json` -> laravel, `requirements.txt`/`pyproject.toml` -> python, `go.mod` -> go, `Gemfile` -> ruby, otherwise `unknown`). Project name = basename of path.
+Detect type by marker file:
 
-## Step 5 — Write workspace map
+| Marker | Type |
+|--------|------|
+| `artisan` or `composer.json` | laravel |
+| `package.json` | node |
+| `Cargo.toml` | rust |
+| `go.mod` | go |
+| `pyproject.toml` or `requirements.txt` | python |
+| `Gemfile` | ruby |
+| none of above | unknown |
 
-Write `~/.tq/workspace-map.md` with a markdown table (columns: project, path, type), sorted alphabetically by project name. Include generation date and scan dirs at the top.
+## 5. Write workspace map
 
-## Step 6 — Summary
+Write `~/.tq/workspace-map.md` — markdown table (project, path, type), sorted by name. Include generation date and scan dirs at top. If the write fails, stop: "Failed to write workspace map — check permissions on `~/.tq/`."
 
-Report: number of directories scanned, projects found, paths to config and workspace map. Warn if any scan directory yielded zero git repositories.
+## 6. Report
 
-Suggest next steps:
-- Re-run `/init` after adding new projects
-- Run `/install` to ensure tq binaries are on PATH
-- Run `/health` to verify the full system is operational
+Show a summary table:
+
+| Item | Value |
+|------|-------|
+| Dirs scanned | `<count>` |
+| Projects found | `<count>` (by type breakdown) |
+| Config | `~/.tq/config/workspaces.yaml` |
+| Workspace map | `~/.tq/workspace-map.md` |
+
+Warn if any dir yielded zero repos.
+
+Related: `/install` for binaries, `/health` for diagnostics, `/todo` for creating queues.

@@ -1,14 +1,14 @@
 ---
 name: health
 description: Verify tq binaries, cron, queues, and logs
-tags: tq, health, status, diagnostics
-allowed-tools: Bash(ls), Bash(which), Bash(crontab), Bash(tmux), Bash(tail), Bash(tq), Bash(tq-converse), Bash(cat), Bash(grep), Bash(test), Bash(launchctl)
-argument-hint: [queue-name]
+tags: tq, health, status, diagnostics, check, verify
+allowed-tools: Bash(ls), Bash(which), Bash(crontab), Bash(tmux), Bash(tail), Bash(tq), Bash(tq-converse), Bash(cat), Bash(grep), Bash(test), Bash(launchctl), Bash(python3)
+argument-hint: "[queue-name]"
 ---
 
 Arguments: $ARGUMENTS
 
-Run all checks below, then summarize with a pass/warn/fail status for each. If `$ARGUMENTS` names a specific queue, focus checks 3-6 on that queue only.
+Run all checks below, then summarize with a pass/warn/fail status for each. If `$ARGUMENTS` names a specific queue, focus checks 3-6 on that queue only. Never stop on individual check failures — run all checks and report aggregate results.
 
 ## 1. Binary check
 
@@ -34,17 +34,22 @@ For any task with `status=running` in state files, verify the tmux session is al
 
 ## 5. Log check
 
-Run `tail -50 ~/.tq/logs/tq.log`. Surface lines containing `error`, `Error`, `failed`, or `Exit code`. Warn if log file is missing but cron jobs are configured.
+```bash
+tail -50 ~/.tq/logs/tq.log 2>/dev/null | grep -iE 'error|failed|exit code' || echo "(clean)"
+```
+
+Warn if log file is missing but cron jobs are configured. Warn if log file exceeds 10MB (suggest rotation).
 
 ## 6. Conversation mode check
 
-Verify conversation infrastructure:
-- Orchestrator session alive: `tmux has-session -t tq-orchestrator 2>/dev/null`
-- Registry exists and is valid JSON: `test -f ~/.tq/conversations/registry.json && python3 -c "import json; json.load(open('$HOME/.tq/conversations/registry.json'))"`
-- Telegram config exists: `test -f ~/.tq/config/message.yaml`
-- Telegram poll running: check crontab for `tq-telegram-poll` or launchd for `com.tq.telegram-poll`
+| Check | Command | Fail Action |
+|-------|---------|-------------|
+| Orchestrator alive | `tmux has-session -t tq-orchestrator 2>/dev/null` | Suggest `/converse start` |
+| Registry valid JSON | `python3 -c "import json; json.load(open('$HOME/.tq/conversations/registry.json'))"` | Warn: corrupt registry |
+| Telegram config | `test -f ~/.tq/config/message.yaml` | Suggest `/setup-telegram` |
+| Poll running | `crontab -l 2>/dev/null \| grep tq-telegram-poll` or `launchctl list com.tq.telegram-poll` | Suggest `tq-telegram-watchdog` |
 
-Pass if all present and valid. Warn if telegram config missing (suggest `/setup-telegram`). Warn if orchestrator is down but conversations are registered (suggest `/converse start`).
+Warn if orchestrator is down but conversations are registered.
 
 ## 7. Config check
 
@@ -70,3 +75,5 @@ workspace config      pass     32 projects cataloged
 ```
 
 Then show per-queue `tq --status` output beneath.
+
+Related: `/install` for missing binaries, `/converse` for session management, `/setup-telegram` for bot config, `/init` for workspace setup, `/jobs` for cron details.

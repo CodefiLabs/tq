@@ -63,9 +63,9 @@ SESSION="tq-${SESSION_BASE}-${EPOCH_SUFFIX}"
 
 ## Notes
 
-- The epoch suffix prevents collision when the same prompt is re-queued after a reset
-- tmux session names must not contain `.` or `:` -- the character replacement handles this
-- The `-` separator between base and epoch is always present; if the base ends with `-`, strip it first to avoid `--`
+- Epoch suffix prevents collision when the same prompt is re-queued after a reset
+- Character replacement handles tmux's ban on `.` and `:` in session names
+- Strip trailing `-` before appending `-<epoch>` to avoid `--`
 
 ## Conversation Mode Session Names
 
@@ -80,3 +80,10 @@ Conversation sessions use a slug-based naming scheme with no epoch suffix:
 Slugs are short kebab-case names (2-4 words) chosen by the orchestrator Claude when creating a new conversation. Examples: `fix-auth-bug`, `refactor-api`, `update-docs`.
 
 Since there is no epoch suffix, conversation session names are unique by slug. Starting a session with an already-active slug reuses the existing session.
+
+## Related
+
+- **SKILL.md** — tq overview, queue format, and command reference
+- **`references/cron-expressions.md`** — natural language to cron mapping
+- **`references/chrome-integration.md`** — Chrome profile and launcher setup
+- Commands: `/converse` (conversation sessions), `/todo` (queue creation)

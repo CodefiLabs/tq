@@ -72,3 +72,9 @@ When no queue name is given, infer from the schedule keyword:
 | "hourly" / "every hour" | `hourly` |
 | "nightly" / "night" | `nightly` |
 | no schedule | `basename` of current working directory |
+
+## Related
+
+- **SKILL.md** — tq overview, queue format, and command reference
+- **`references/session-naming.md`** — tmux session/window naming algorithm
+- Commands: `/schedule`, `/todo`, `/jobs`, `/pause`, `/unschedule`

@@ -1,50 +1,49 @@
 ---
 name: tq-message
-description: Send task completion summary via messaging service
+description: Send task completion summary via messaging
 tags: tq, notify, message, summary, telegram
-allowed-tools: Bash(tq-message)
-argument-hint: <task-hash> <queue-file>
+allowed-tools: Bash(tq-message), Bash(which), Bash(test)
+argument-hint: "<task-hash> <queue-file>"
 ---
 
 Arguments: $ARGUMENTS
 
-## 1. Parse arguments
+## 1. Validate
+
+Check `tq-message` is on PATH:
+```bash
+which tq-message
+```
+If missing, stop: "Run `/install` first."
 
 Extract from `$ARGUMENTS`:
-- **First**: task hash (8-char hex, e.g. `a1b2c3d4`)
-- **Second**: queue file path (absolute path to `.yaml`)
+- **First**: task hash (8 hex chars, e.g. `a1b2c3d4`)
+- **Second**: queue file path (absolute, ending `.yaml`)
 
-If either is missing or malformed (hash not 8 hex chars, path not ending in `.yaml`), stop and report which argument is invalid.
+If no arguments provided, stop: "Usage: `/tq-message <task-hash> <queue-file>`"
+If hash is not exactly 8 hex characters, stop: "Invalid task hash: expected 8 hex chars (e.g. `a1b2c3d4`)."
+If path doesn't end in `.yaml`, stop: "Invalid queue file: expected `.yaml` path."
+If `~/.tq/config/message.yaml` is missing, stop: "No messaging config found — run `/setup-telegram` first."
 
 ## 2. Write summary
 
-Write a rich, specific summary of what was accomplished:
-- **Lead sentence**: state what was done + specific output (e.g. "Wrote a 106-line guide at docs/demo-video-tips.md")
-- **Numbered list**: 3-6 items of what was built/covered/fixed, each with a brief description after an em dash
-- Keep under 3500 characters (Telegram limit is 4096; leave room for prefix)
-- No filler ("I successfully...", "In this session...")
+Write a specific summary of what was accomplished:
 
-Example:
-```
-Wrote a 106-line demo video guide at docs/demo-video-tips.md. The guide covers:
-1. Why the video matters — frames it as judges' main window into the project
-2. What judges look for — 5 evaluation lenses with concrete criteria
-3. Video structure — a 5-minute template: Hook > Live Demo > Technical Walk > Close
-4. Do This / Avoid This — actionable dos/don'ts from judging criteria
-5. Recording tips — tools, formats, audio quality, the 100MB upload limit
-```
+| Rule | Example |
+|------|---------|
+| Lead with output | "Wrote a 106-line guide at docs/tips.md" |
+| 3-6 numbered items | Each with em dash description |
+| Max 3500 chars | Telegram limit minus prefix |
+| No filler | Never "I successfully..." or "In this session..." |
 
-## 3. Send via tq-message
-
-Store the summary in a variable and pass it:
+## 3. Send
 
 ```bash
-SUMMARY='<your summary text here>'
-tq-message --task "<TASK_HASH>" --queue "<QUEUE_FILE>" --message "$SUMMARY"
+tq-message --task "<HASH>" --queue "<QUEUE_FILE>" --message '<summary>'
 ```
 
-If `tq-message` exits non-zero, report the error output.
+If exit code is non-zero, report the error and stop.
 
-Do not explain what you are doing. Write the summary and run the command.
+Do not narrate. Write summary, run command.
 
-> Related: `/tq-reply` (conversation mode replies), `/converse` (manage sessions)
+Related: `/tq-reply` (conversation replies), `/converse` (sessions)
