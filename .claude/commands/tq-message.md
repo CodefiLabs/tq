@@ -1,40 +1,54 @@
 ---
 name: tq-message
-description: Write a tq task completion summary to the configured messaging service. Called automatically by tq on-stop hooks.
-tags: tq, notify, message, summary
+description: Send task completion summary via messaging service
+tags: tq, notify, message, summary, telegram
 allowed-tools: Bash(tq-message)
+argument-hint: <task-hash> <queue-file>
 ---
 
 Arguments: $ARGUMENTS
 
-You have just completed a tq task. Parse the arguments to get the task hash and queue file:
-- First argument: task hash (8-char string, e.g. `a1b2c3d4`)
-- Second argument: queue file path (absolute path to a .yaml file)
+## 1. Parse arguments
 
-## Steps
+Extract from `$ARGUMENTS`:
+- **First**: task hash (8-char hex, e.g. `a1b2c3d4`)
+- **Second**: queue file path (absolute path to `.yaml`)
 
-1. Write a rich, specific summary of what you accomplished. Structure it as:
-   - **Lead sentence**: what was done + specific output (e.g. "Wrote a 106-line guide at docs/demo-video-tips.md")
-   - **Numbered list** of what was built/covered/fixed (3-6 items), each with a brief description after an em dash
-   - Keep it tight — no filler like "I successfully..." or "In this session..."
+If either is missing or malformed (hash not 8 hex chars, path not ending in `.yaml`), stop and report which argument is invalid.
 
-   Example format:
-   ```
-   Wrote a 106-line demo video guide at docs/demo-video-tips.md in app-vibeathon-us. The guide covers:
-   1. Why the video matters — frames it as judges' main window into the project
-   2. What judges look for — 5 evaluation lenses with concrete criteria
-   3. Video structure — a 5-minute template: Hook → Live Demo → Technical Walk → Close
-   4. Do This / Avoid This — actionable dos/don'ts from judging criteria
-   5. Recording tips — tools, formats, audio quality, the 100MB upload limit
-   6. Uploading — platform flow including the code-first requirement and S3 upload
-   ```
+## 2. Write summary
 
-2. Send the summary:
+Review what was accomplished in this session (check recent tool calls, file changes, or tmux scrollback if context is unclear). Then write a rich, specific summary:
+- **Lead sentence**: state what was done + specific output (e.g. "Wrote a 106-line guide at docs/demo-video-tips.md")
+- **Numbered list**: 3-6 items of what was built/covered/fixed, each with a brief description after an em dash
+- Keep under 3500 characters (Telegram limit is 4096; leave room for prefix)
+- No filler ("I successfully...", "In this session...")
 
-```bash
-tq-message --task "<first argument>" --queue "<second argument>" --message "<your summary here>"
+Example:
+```
+Wrote a 106-line demo video guide at docs/demo-video-tips.md. The guide covers:
+1. Why the video matters — frames it as judges' main window into the project
+2. What judges look for — 5 evaluation lenses with concrete criteria
+3. Video structure — a 5-minute template: Hook > Live Demo > Technical Walk > Close
+4. Do This / Avoid This — actionable dos/don'ts from judging criteria
+5. Recording tips — tools, formats, audio quality, the 100MB upload limit
 ```
 
-Replace the placeholders with the actual hash, queue file path, and your written summary.
+## 3. Send via tq-message
 
-Do not explain what you are doing. Just write the summary and run the command.
+Write the summary to a temp file and pass it (avoids quoting issues with special characters):
+
+```bash
+MSG_TMPFILE=$(mktemp /tmp/tq-summary-XXXXXX.txt)
+cat > "$MSG_TMPFILE" <<'SUMMARYEOF'
+<your summary text here>
+SUMMARYEOF
+tq-message --task "<TASK_HASH>" --queue "<QUEUE_FILE>" --message "$(cat "$MSG_TMPFILE")"
+rm -f "$MSG_TMPFILE"
+```
+
+If `tq-message` exits non-zero, report the error output.
+
+Do not explain what you are doing. Write the summary and run the command.
+
+> Related: `/tq-reply` (conversation mode replies), `/converse` (manage sessions)
