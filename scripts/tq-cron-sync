@@ -87,6 +87,18 @@ done < <(python3 "$SCAN_SCRIPT" "$QUEUES_DIR")
 # Self-watcher entry
 echo "*/${INTERVAL} * * * * ${SELF_BIN} >> ${LOGS_DIR}/tq-cron-sync.log 2>&1 # tq-managed:tq-cron-sync" >> "$CRONTAB_NEW"
 
-# Write merged crontab
-crontab "$CRONTAB_NEW"
-echo "tq-cron-sync: crontab synced ($(grep -c '# tq-managed:' "$CRONTAB_NEW" || true) managed entries)"
+# Compare and write merged crontab (only if changed)
+MANAGED_COUNT="$(grep -c '# tq-managed:' "$CRONTAB_NEW" || true)"
+EXISTING_CRONTAB=$(mktemp /tmp/tq-crontab-existing-XXXXXX)
+trap 'rm -f "$SCAN_SCRIPT" "$CRONTAB_NEW" "$EXISTING_CRONTAB"' EXIT
+{ crontab -l 2>/dev/null || true; } > "$EXISTING_CRONTAB"
+
+if diff -q "$EXISTING_CRONTAB" "$CRONTAB_NEW" >/dev/null 2>&1; then
+  echo "tq-cron-sync: no changes (${MANAGED_COUNT} managed entries)"
+else
+  if crontab "$CRONTAB_NEW" 2>/dev/null; then
+    echo "tq-cron-sync: crontab synced (${MANAGED_COUNT} managed entries)"
+  else
+    echo "tq-cron-sync: crontab changed but write failed (run manually to apply)" >&2
+  fi
+fi
