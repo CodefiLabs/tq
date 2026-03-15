@@ -39,6 +39,6 @@
     "access": "public"
   },
   "scripts": {
-    "postpublish": "node tools/update-marketplace.js"
+    "postpublish": "node tools/update-marketplace.js && bash scripts/tq-install.sh"
   }
 }
