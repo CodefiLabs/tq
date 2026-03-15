@@ -61,7 +61,7 @@ print(json.dumps({
 PYEOF
 
 cat > "$PROCESS_SCRIPT" <<'PYEOF'
-import sys, json
+import sys, json, base64
 
 data = json.loads(sys.argv[1])
 user_id = int(sys.argv[2])
@@ -90,9 +90,11 @@ for update in results:
         message_id = msg['message_id']
         # Extract reply_to_message_id if present
         reply_to = msg.get('reply_to_message', {}).get('message_id', '')
-        # Output: chat_id<TAB>message_id<TAB>reply_to<TAB>text
+        # Output: chat_id<TAB>message_id<TAB>reply_to<TAB>base64(text)
+        # Base64-encode text to preserve multi-line messages as single output lines
         # Use '-' placeholder for empty reply_to (bash read collapses consecutive tabs)
-        messages.append(f"{chat_id}\t{message_id}\t{reply_to or '-'}\t{text}")
+        text_b64 = base64.b64encode(text.encode()).decode()
+        messages.append(f"{chat_id}\t{message_id}\t{reply_to or '-'}\t{text_b64}")
 
 if new_offset is not None:
     with open(offset_file, 'w') as f:
@@ -213,10 +215,13 @@ poll_once() {
 
   mkdir -p "$HOME/.tq/workspace"
 
-  while IFS=$'\t' read -r CHAT_ID MSG_ID REPLY_TO MSG; do
-    if [[ -z "$MSG" ]]; then
+  while IFS=$'\t' read -r CHAT_ID MSG_ID REPLY_TO MSG_B64; do
+    if [[ -z "$MSG_B64" ]]; then
       continue
     fi
+
+    # Decode base64-encoded message text (preserves multi-line messages)
+    MSG="$(python3 -c "import sys,base64; sys.stdout.buffer.write(base64.b64decode(sys.argv[1]))" "$MSG_B64")"
 
     echo "[tq-telegram-poll] message: ${MSG:0:60}"
 
