@@ -323,6 +323,7 @@ for (prompt, cwd, name, reset_mode, sequential) in tasks:
     stop_script += '# Mark tq task done\n'
     stop_script += 'STATE_FILE=' + json.dumps(state_file) + '\n'
     stop_script += 'RESET_MODE=' + json.dumps(reset_mode) + '\n'
+    stop_script += 'SEQUENTIAL=' + json.dumps(sequential) + '\n'
     stop_script += 'if [[ -f "$STATE_FILE" ]]; then\n'
     stop_script += '  if [[ "$RESET_MODE" == "on-complete" ]]; then\n'
     stop_script += '    # on-complete: tq-message runs first, then state is cleared for re-run\n'
@@ -364,6 +365,12 @@ for (prompt, cwd, name, reset_mode, sequential) in tasks:
     stop_script += 'if [[ "$RESET_MODE" == "on-complete" && -f "$STATE_FILE" ]]; then\n'
     stop_script += '  rm -f "$STATE_FILE"\n'
     stop_script += 'fi\n'
+    # Sequential mode: re-invoke tq to spawn the next task
+    if sequential:
+        stop_script += '\n# Sequential mode: spawn next task in queue\n'
+        stop_script += 'if [[ -n "$TQ_QUEUE_FILE" ]] && command -v tq &>/dev/null; then\n'
+        stop_script += '  tq "$TQ_QUEUE_FILE" &\n'
+        stop_script += 'fi\n'
     with open(stop_hook, 'w') as f:
         f.write(stop_script)
     os.chmod(stop_hook, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
