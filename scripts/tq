@@ -457,6 +457,7 @@ while IFS= read -r JSON_LINE; do
   FIRST_LINE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['first_line'])" "$JSON_LINE")"
   TASK_NAME_FIELD="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('name', ''))" "$JSON_LINE")"
   RESET_MODE="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('reset', ''))" "$JSON_LINE")"
+  SEQUENTIAL="$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('sequential', False))" "$JSON_LINE")"
   STATE_FILE="$STATE_DIR/$HASH"
   LAUNCHER="$STATE_DIR/$HASH.launch.py"
 
@@ -540,4 +541,10 @@ EOF
   (sleep 10 && tmux send-keys -t "$SESSION:$WIN_IDX" "" Enter) &
 
   echo "  [spawned] $SESSION -- $FIRST_LINE"
+
+  # Sequential mode: only spawn one task per invocation
+  if [[ "$SEQUENTIAL" == "True" ]]; then
+    echo "  [sequential] waiting for completion before next task"
+    break
+  fi
 done <<< "$PARSE_OUTPUT"
