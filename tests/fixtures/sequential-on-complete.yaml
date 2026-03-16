@@ -1,0 +1,5 @@
+cwd: /tmp
+sequential: true
+reset: on-complete
+tasks:
+  - prompt: "this should error"

@@ -139,7 +139,7 @@ os.makedirs(sessions_dir, exist_ok=True)
 
 # Support direct prompt mode: --prompt <text> <state_dir> [cwd]
 if len(sys.argv) > 1 and sys.argv[1] == '--prompt':
-    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '', '', '')]
+    tasks = [(sys.argv[2].strip(), sys.argv[4] if len(sys.argv) > 4 else '', '', '', False)]
     state_dir = sys.argv[3]
 else:
     queue_file = sys.argv[1]
@@ -165,6 +165,21 @@ else:
         if m:
             reset_mode = m.group(1).strip().strip('"\'')
             break
+
+    # Extract top-level sequential flag
+    sequential = False
+    for line in lines:
+        m = re.match(r'^sequential:\s*(.+)$', line)
+        if m:
+            val = m.group(1).strip().strip('"\'').lower()
+            sequential = val in ('true', 'yes', '1')
+            break
+
+    # Validate: sequential + on-complete creates an infinite loop
+    if sequential and reset_mode == 'on-complete':
+        print("Error: sequential: true is incompatible with reset: on-complete", file=sys.stderr)
+        print("  on-complete deletes task state, causing sequential to re-run the same task forever", file=sys.stderr)
+        sys.exit(1)
 
     # Handle queue-level resets before task evaluation.
     # Clears task state files (and .queue-notified) so tasks re-run.
@@ -263,10 +278,10 @@ else:
 
         prompt = prompt.strip()
         if prompt:
-            tasks.append((prompt, cwd, current_name, reset_mode))
+            tasks.append((prompt, cwd, current_name, reset_mode, sequential))
             current_name = ''
 
-for (prompt, cwd, name, reset_mode) in tasks:
+for (prompt, cwd, name, reset_mode, sequential) in tasks:
     h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
     first_line = prompt.split('\n')[0][:80]
 
@@ -410,7 +425,7 @@ for (prompt, cwd, name, reset_mode) in tasks:
         f.write('else:\n')
         f.write("    os.execvp('claude', " + claude_args + ")\n")
 
-    print(json.dumps({'hash': h, 'first_line': first_line, 'name': name, 'reset': reset_mode}))
+    print(json.dumps({'hash': h, 'first_line': first_line, 'name': name, 'reset': reset_mode, 'sequential': sequential}))
 
 PYEOF
 
