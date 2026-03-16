@@ -11,6 +11,7 @@ Queue files are YAML files passed to `tq` as the first argument. These are used 
 
 - `schedule` — cron expression for automatic scheduling via `tq-cron-sync` (string)
 - `reset` — when to automatically clear task state so tasks re-run (string, see Reset Modes below)
+- `sequential` — when `true`, tasks run one at a time in order; each waits for the previous to complete (boolean, default `false`)
 - `message` — notification config block (see Queue-Level Messaging below)
 
 ## Task Object Keys
@@ -39,6 +40,38 @@ tasks:
 ```
 
 Queue-level resets (`daily`, `weekly`, `hourly`, `always`) clear state **before** task evaluation, so all tasks re-run on that run. They also clear `.queue-notified` so the completion notification fires fresh. A `.last_reset` dotfile in the state dir tracks the last reset period.
+
+## Sequential Execution
+
+Add `sequential: true` to run tasks one at a time in YAML order. Each task waits for
+the previous task's Claude session to complete before spawning.
+
+```yaml
+sequential: true
+cwd: /Users/kk/Sites/myproject
+tasks:
+  - name: analyze
+    prompt: "Analyze the codebase and write findings to docs/analysis.md"
+  - name: implement
+    prompt: "Read docs/analysis.md and implement the top 3 recommendations"
+  - name: test
+    prompt: "Run the test suite and fix any failures"
+```
+
+**How it works**: `tq` spawns only the first pending task. When that task's Claude session
+finishes, its on-stop hook re-invokes `tq`, which skips completed tasks and spawns the next
+pending one. This continues until all tasks are done.
+
+**Crash recovery**: If a task's tmux session dies without the stop hook firing (e.g., OOM kill),
+the chain breaks. The next scheduled `tq` run (or manual `tq <queue.yaml>`) detects the dead
+session, marks it done, and spawns the next task.
+
+**Compatible with `reset:`**: `reset: daily` + `sequential: true` resets all task state at the
+start of the day, then runs tasks sequentially from the beginning.
+
+**Incompatible with `reset: on-complete`**: This combination is rejected at parse time because
+`on-complete` deletes task state on completion, which would cause sequential to re-run the
+same task indefinitely.
 
 ## Automatic Scheduling
 
@@ -124,6 +157,7 @@ Each task's identity is derived from `SHA-256(prompt)[:8]`. This means:
 
 ## Do Not
 
-- Do not add top-level keys other than `cwd`, `tasks`, `schedule`, `reset`, and `message` — others are ignored
+- Do not add top-level keys other than `cwd`, `tasks`, `schedule`, `reset`, `sequential`, and `message` — others are ignored
+- Do not combine `sequential: true` with `reset: on-complete` — tq will error at parse time
 - Do not use YAML anchors — the embedded Python parser does not support them
 - Do not leave `cwd` blank — tasks will run in an undefined directory

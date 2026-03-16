@@ -34,6 +34,7 @@ Location: `~/.tq/queues/<name>.yaml`
 ```yaml
 schedule: "0 9 * * *"              # optional -- auto-managed crontab via tq-cron-sync
 reset: daily                        # optional -- daily|weekly|hourly|always|on-complete
+sequential: true                    # optional -- run tasks one at a time in order
 cwd: /path/to/working/directory     # where claude runs for each task
 message:                            # optional -- notification config
   service: telegram
@@ -90,6 +91,22 @@ Statuses: `pending` -> `running` -> `done`
 | `/tq-reply` | Send response back to Telegram (conversation mode) |
 | `/tq-message` | Write and send task completion summary |
 | `/setup-telegram` | Configure Telegram bot token and notifications |
+
+## Sequential Execution
+
+Add `sequential: true` to run tasks one at a time in YAML order. Each task waits for the previous to complete before spawning. The on-stop hook re-invokes `tq`, which skips done tasks and spawns the next pending one.
+
+```yaml
+sequential: true
+cwd: /Users/kk/Sites/myproject
+tasks:
+  - name: analyze
+    prompt: "Analyze the codebase and write findings to docs/analysis.md"
+  - name: implement
+    prompt: "Read docs/analysis.md and implement the top 3 recommendations"
+```
+
+Crash recovery: if a session dies without the stop hook firing, the next `tq` run (manual or cron) detects the dead session and resumes the chain. Incompatible with `reset: on-complete`.
 
 ## CLI Usage
 
@@ -165,7 +182,7 @@ tq-converse stop [<slug>]                 # stop session or orchestrator
 | Queue runs but nothing happens | All tasks already `done` | Delete state: `rm -rf <queue-dir>/.tq/<name>/` |
 | Cron not firing | `tq-cron-sync` not running or schedule missing | Check `crontab -l \| grep tq` and add `schedule:` to queue YAML |
 | Telegram messages not routing | Orchestrator not running | Run `/converse start` |
-| Malformed YAML | Parser does not support anchors | Use only `cwd`, `tasks`, `schedule`, `reset`, `message` top-level keys |
+| Malformed YAML | Parser does not support anchors | Use only `cwd`, `tasks`, `schedule`, `reset`, `sequential`, `message` top-level keys |
 
 ## Additional Resources
 
