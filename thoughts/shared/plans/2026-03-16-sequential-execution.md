@@ -282,11 +282,11 @@ If the skill definition lists supported queue-level keys, add `sequential` to th
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] No broken markdown links in updated docs
-- [ ] `sequential` appears in queue-format.md
+- [x] No broken markdown links in updated docs
+- [x] `sequential` appears in queue-format.md
 
 #### Manual Verification:
-- [ ] Documentation reads clearly and covers the key behaviors (chaining mechanism, crash recovery, reset compatibility)
+- [x] Documentation reads clearly and covers the key behaviors (chaining mechanism, crash recovery, reset compatibility)
 
 ---
 
