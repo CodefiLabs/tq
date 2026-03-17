@@ -6,6 +6,7 @@ import os
 import subprocess
 import stat
 import textwrap
+import uuid
 
 HOOKS_DIR = os.path.expanduser("~/.tq/hooks")
 TQ_BIN = None  # set by cli.py to the resolved path of the tq entry point
@@ -76,8 +77,9 @@ def spawn(db, sid, prompt, cwd):
     tmux_name = tmux_session_name(sid)
     settings_path = _write_hooks(sid, cwd)
     oauth = _get_oauth()
+    claude_session_id = str(uuid.uuid4())
 
-    store.start_session(db, sid, tmux_name)
+    store.start_session(db, sid, tmux_name, claude_session_id=claude_session_id)
 
     # Create tmux session
     _tmux("new-session", "-d", "-s", tmux_name, "-x", "220", "-y", "50")
@@ -92,7 +94,7 @@ def spawn(db, sid, prompt, cwd):
     _tmux("send-keys", "-t", tmux_name, f"cd '{cwd}'", "Enter")
 
     # Launch claude
-    cmd = f"claude --settings '{settings_path}' --dangerously-skip-permissions"
+    cmd = f"claude --session-id '{claude_session_id}' --settings '{settings_path}' --dangerously-skip-permissions"
     if prompt:
         # Escape prompt for shell
         safe_prompt = prompt.replace("'", "'\\''")

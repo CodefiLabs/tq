@@ -35,6 +35,14 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _migrate(db):
+    """Add columns that don't exist yet."""
+    cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)").fetchall()}
+    if "claude_session_id" not in cols:
+        db.execute("ALTER TABLE sessions ADD COLUMN claude_session_id TEXT")
+        db.commit()
+
+
 def connect():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -42,23 +50,30 @@ def connect():
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)
+    _migrate(db)
     return db
 
 
-def create_session(db, sid, prompt=None, cwd="~", queue=None):
+def create_session(db, sid, prompt=None, cwd="~", queue=None, claude_session_id=None):
     db.execute(
-        "INSERT INTO sessions (id, prompt, cwd, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-        (sid, prompt, cwd, _now()),
+        "INSERT INTO sessions (id, prompt, cwd, status, claude_session_id, created_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+        (sid, prompt, cwd, claude_session_id, _now()),
     )
     db.commit()
     return sid
 
 
-def start_session(db, sid, tmux_session):
-    db.execute(
-        "UPDATE sessions SET status='running', tmux_session=?, started_at=? WHERE id=?",
-        (tmux_session, _now(), sid),
-    )
+def start_session(db, sid, tmux_session, claude_session_id=None):
+    if claude_session_id:
+        db.execute(
+            "UPDATE sessions SET status='running', tmux_session=?, claude_session_id=?, started_at=? WHERE id=?",
+            (tmux_session, claude_session_id, _now(), sid),
+        )
+    else:
+        db.execute(
+            "UPDATE sessions SET status='running', tmux_session=?, started_at=? WHERE id=?",
+            (tmux_session, _now(), sid),
+        )
     db.commit()
 
 

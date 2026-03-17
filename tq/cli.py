@@ -60,10 +60,11 @@ def cmd_status(args):
         print("No sessions.")
         return
     for s in sessions:
-        icon = {"running": "●", "done": "✓", "pending": "○", "failed": "✗"}
+        icon = {"running": "●", "done": "✓", "pending": "○", "failed": "✗", "suspended": "◉"}
         status = icon.get(s["status"], "?")
         prompt = (s["prompt"] or "interactive")[:50]
-        print(f"  {status} {s['id']}  {s['status']:<8}  {prompt}")
+        csid = f"  [{s['claude_session_id'][:8]}]" if s["claude_session_id"] else ""
+        print(f"  {status} {s['id']}  {s['status']:<10}  {prompt}{csid}")
 
 
 def cmd_stop(args):
