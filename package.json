@@ -16,7 +16,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/CodefiLabs/tq.git"
+    "url": "git+https://github.com/CodefiLabs/tq.git"
   },
   "homepage": "https://github.com/CodefiLabs/tq",
   "author": "CodefiLabs",
