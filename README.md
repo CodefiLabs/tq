@@ -39,25 +39,38 @@ That's it. You're running Claude Code from your phone.
 
 ## Installation
 
+### CLI only
+
 ```bash
-# From the repo root:
-bash migrate-v1-to-v2.sh
+npm install -g @codefilabs/tq
 ```
 
-This installs a `tq` wrapper to `/opt/homebrew/bin/` (or set `TQ_INSTALL_DIR`).
+This puts `tq` on your PATH. You can immediately use `tq setup`, `tq daemon start`, etc.
 
-Or manually:
+### CLI + Claude Code plugin
 
 ```bash
-# Create a wrapper script
-cat > /opt/homebrew/bin/tq <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-TQ_ROOT="/path/to/tq/repo"
-export PYTHONPATH="$TQ_ROOT:${PYTHONPATH:-}"
-exec python3 -m tq "$@"
-EOF
-chmod +x /opt/homebrew/bin/tq
+npm install -g @codefilabs/tq
+claude plugin install "$(npm root -g)/@codefilabs/tq"
+```
+
+The Claude Code plugin gives spawned sessions the `/tq-reply` slash command so they can send responses back to Telegram.
+
+### CLI + OpenClaw plugin
+
+```bash
+npm install -g @codefilabs/tq
+openclaw plugins install "$(npm root -g)/@codefilabs/tq/openclaw-plugin"
+```
+
+Provides 3 tools (`tq_run`, `tq_status`, `tq_stop`), a health-check service, and auto-injects active session context into agent prompts.
+
+### Everything
+
+```bash
+npm install -g @codefilabs/tq
+claude plugin install "$(npm root -g)/@codefilabs/tq"
+openclaw plugins install "$(npm root -g)/@codefilabs/tq/openclaw-plugin"
 ```
 
 ## CLI
@@ -110,28 +123,7 @@ One database. One config file. No scattered state directories.
 
 ## Plugins
 
-tq works as both a **Claude Code plugin** and an **OpenClaw plugin**.
-
-### Claude Code
-
-Install the plugin to get the `/tq-reply` slash command:
-
-```bash
-claude plugin install /path/to/tq
-```
-
-Claude sessions spawned by tq use `/tq-reply` to send responses back to Telegram.
-
-### OpenClaw
-
-Install as an OpenClaw plugin for multi-channel support:
-
-```bash
-openclaw plugins install /path/to/tq/openclaw-plugin
-```
-
-Provides 3 tools (`tq_run`, `tq_status`, `tq_stop`), a health-check service,
-and auto-injects active session context into agent prompts.
+tq ships as both a **Claude Code plugin** and an **OpenClaw plugin** — see [Installation](#installation) for setup commands.
 
 ## Architecture
 

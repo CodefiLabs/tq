@@ -1,6 +1,6 @@
 {
   "name": "@codefilabs/tq",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Claude Code sessions via Telegram + tmux",
   "bin": {
     "tq": "bin/tq"
@@ -8,6 +8,10 @@
   "files": [
     "bin/",
     "tq/*.py",
+    ".claude-plugin/",
+    ".claude/",
+    "skills/",
+    "openclaw-plugin/",
     "README.md"
   ],
   "repository": {
