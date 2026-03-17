@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.tq/
+.claude/
+.claude-plugin/
+skills/
+openclaw-plugin/
+migrate-v1-to-v2.sh
+.gitignore
+.ai-onboard-scratch/
