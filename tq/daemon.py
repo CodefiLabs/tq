@@ -11,6 +11,7 @@ from . import store, session, telegram
 PID_FILE = os.path.expanduser("~/.tq/daemon.pid")
 CONFIG_PATH = os.path.expanduser("~/.tq/config.json")
 HEALTH_INTERVAL = 30  # seconds
+IDLE_CHECK_INTERVAL = 300  # 5 minutes
 
 
 def load_config():
@@ -168,6 +169,7 @@ def run():
     print(f"tq daemon running (pid {os.getpid()})")
     offset = None
     last_health = 0
+    last_idle = 0
 
     while True:
         try:
@@ -184,6 +186,16 @@ def run():
             if now - last_health > HEALTH_INTERVAL:
                 session.check_health(db)
                 last_health = now
+
+            # Idle auto-suspend
+            if now - last_idle > IDLE_CHECK_INTERVAL:
+                idle_timeout = cfg.get("idle_timeout_minutes", 60)
+                activity_grace = cfg.get("activity_grace_minutes", 30)
+                if idle_timeout > 0:
+                    suspended = session.check_idle(db, idle_timeout, activity_grace)
+                    for sid in suspended:
+                        telegram.send_plain(f"💤 Suspended idle session {sid}")
+                last_idle = now
 
         except KeyboardInterrupt:
             cleanup(None, None)
