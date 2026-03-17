@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+TQ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$TQ_ROOT:${PYTHONPATH:-}"
+exec python3 -m tq "$@"

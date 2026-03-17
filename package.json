@@ -1,0 +1,28 @@
+{
+  "name": "@codefilabs/tq",
+  "version": "2.0.0",
+  "description": "Claude Code sessions via Telegram + tmux",
+  "bin": {
+    "tq": "bin/tq"
+  },
+  "files": [
+    "bin/",
+    "tq/",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodefiLabs/tq.git"
+  },
+  "homepage": "https://github.com/CodefiLabs/tq",
+  "author": "CodefiLabs",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "tmux",
+    "telegram",
+    "ai",
+    "sessions",
+    "daemon"
+  ]
+}
