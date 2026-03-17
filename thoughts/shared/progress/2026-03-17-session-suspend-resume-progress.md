@@ -1,7 +1,7 @@
 ---
 plan: thoughts/shared/plans/2026-03-17-session-suspend-resume.md
 started: 2026-03-17
-status: in_progress
+status: complete
 ---
 
 # Implementation Progress: Session Suspend/Resume
@@ -55,3 +55,19 @@ Added `resume()` function in session.py that respawns a suspended session in tmu
 ### Notes
 - `mark_running()` has no status guard (intentional — can transition from any state, unlike `mark_done`/`mark_suspended` which guard against races)
 - Resume uses `--resume` flag, not `--session-id` + `--prompt`
+
+---
+
+## Phase 4: Idle Auto-Suspend
+
+**Completed**: 2026-03-17
+**Status**: COMPLETE
+**Commits**: 9938643, e95463e
+**Tests**: PASS
+
+### Summary
+Added `idle_running_sessions()` in store.py to find running sessions with no Telegram messages for a configurable number of minutes. Added `check_idle()` in session.py that cross-references those candidates against tmux activity timestamps and suspends sessions idle on both axes. The daemon loop calls `check_idle` every 5 minutes using two optional config keys: `idle_timeout_minutes` (default 60, 0 to disable) and `activity_grace_minutes` (default 30).
+
+### Notes
+- Both config keys are optional with sensible defaults
+- Setting `idle_timeout_minutes: 0` fully disables idle checking
