@@ -1,7 +1,0 @@
-cwd: /tmp
-sequential: true
-tasks:
-  - name: step-one
-    prompt: "first task"
-  - name: step-two
-    prompt: "second task"

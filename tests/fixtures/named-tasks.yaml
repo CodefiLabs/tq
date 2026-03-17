@@ -1,7 +1,0 @@
-cwd: /tmp
-tasks:
-  - name: review-auth
-    prompt: "Review the authentication module in src/auth.py for security issues"
-  - name: update-docs
-    prompt: "Update README.md to reflect the latest API changes"
-  - prompt: "echo unnamed task check"

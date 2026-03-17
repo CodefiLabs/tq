@@ -1,0 +1,26 @@
+{
+  "id": "tq",
+  "name": "tq — Claude Code Sessions",
+  "description": "Spawn and manage Claude Code sessions in tmux via OpenClaw",
+  "kind": "tools",
+  "version": "2.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "defaultCwd": {
+        "type": "string",
+        "default": "~",
+        "description": "Default working directory for new sessions"
+      },
+      "tqPath": {
+        "type": "string",
+        "default": "tq",
+        "description": "Path to tq CLI binary"
+      }
+    }
+  },
+  "uiHints": {
+    "defaultCwd": { "label": "Default Working Directory", "placeholder": "~/Sites/myproject" },
+    "tqPath": { "label": "tq Binary Path", "placeholder": "tq or /opt/homebrew/bin/tq" }
+  }
+}

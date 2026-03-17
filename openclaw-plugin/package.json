@@ -1,0 +1,14 @@
+{
+  "name": "openclaw-tq",
+  "version": "2.0.0",
+  "description": "tq — Claude Code sessions in tmux for OpenClaw",
+  "type": "module",
+  "main": "./src/index.ts",
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.ts"]
+  },
+  "license": "MIT"
+}

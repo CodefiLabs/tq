@@ -2,8 +2,6 @@
   "permissions": {
     "deny": [
       "Read(**/.env*)",
-      "Read(**/.tq/**)",
-      "Read(**/*.launch.py)",
       "Read(**/*.pem)",
       "Read(**/*.key)"
     ]

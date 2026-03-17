@@ -1,3 +1,0 @@
-cwd: /tmp
-tasks:
-  - prompt: "task without sequential flag"
