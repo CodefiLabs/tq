@@ -93,6 +93,15 @@ def handle_message(db, cfg, msg):
         if s and s["status"] == "running":
             session.route_message(target_session, text)
             store.track_message(db, msg_id, target_session, "in", text)
+        elif s and s["status"] == "suspended":
+            # Resume the session, then route the message
+            session.resume(db, target_session)
+            store.track_message(db, msg_id, target_session, "in", text)
+            time.sleep(3)
+            session.route_message(target_session, text)
+            sent_id = telegram.send_plain(f"Resumed session {target_session}.", reply_to=msg_id)
+            if sent_id:
+                store.track_message(db, sent_id, target_session, "out", f"Resumed session {target_session}.")
         else:
             telegram.send_plain(f"Session {target_session} is no longer running.", reply_to=msg_id)
     else:
@@ -119,7 +128,7 @@ def handle_command(db, text, msg_id):
             return
         lines = []
         for s in sessions[:15]:
-            status_emoji = {"running": "🟢", "done": "✅", "pending": "⏳", "failed": "❌"}.get(s["status"], "❓")
+            status_emoji = {"running": "🟢", "done": "✅", "pending": "⏳", "failed": "❌", "suspended": "💤"}.get(s["status"], "❓")
             lines.append(f"{status_emoji} {s['id']} — {(s['prompt'] or 'interactive')[:40]}")
         telegram.send_plain("\n".join(lines), reply_to=msg_id)
 

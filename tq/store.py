@@ -85,6 +85,14 @@ def mark_done(db, sid):
     db.commit()
 
 
+def mark_running(db, sid, tmux_session):
+    db.execute(
+        "UPDATE sessions SET status='running', tmux_session=?, started_at=?, completed_at=NULL WHERE id=?",
+        (tmux_session, _now(), sid),
+    )
+    db.commit()
+
+
 def mark_suspended(db, sid):
     db.execute(
         "UPDATE sessions SET status='suspended', completed_at=? WHERE id=? AND status='running'",

@@ -91,6 +91,22 @@ def cmd_suspend(args):
     print(f"Suspended {args.id}")
 
 
+def cmd_resume(args):
+    db = store.connect()
+    s = store.get_session(db, args.id)
+    if not s:
+        print(f"Unknown session: {args.id}")
+        sys.exit(1)
+    if s["status"] != "suspended":
+        print(f"Session {args.id} is not suspended (status: {s['status']})")
+        sys.exit(1)
+    if not s["claude_session_id"]:
+        print(f"Session {args.id} has no Claude session ID — cannot resume")
+        sys.exit(1)
+    session.resume(db, args.id)
+    print(f"Resumed {args.id}")
+
+
 def cmd_run(args):
     db = store.connect()
     target = args.target
@@ -300,6 +316,10 @@ def main():
     p = sub.add_parser("suspend")
     p.add_argument("id")
 
+    # resume
+    p = sub.add_parser("resume")
+    p.add_argument("id")
+
     # run
     p = sub.add_parser("run")
     p.add_argument("target", nargs="?")
@@ -327,6 +347,7 @@ def main():
         "status": cmd_status,
         "stop": cmd_stop,
         "suspend": cmd_suspend,
+        "resume": cmd_resume,
         "run": cmd_run,
         "reply": cmd_reply,
         "_mark-done": cmd_mark_done,

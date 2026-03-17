@@ -104,6 +104,41 @@ def spawn(db, sid, prompt, cwd):
     return tmux_name
 
 
+def resume(db, sid):
+    """Resume a suspended session via claude --resume."""
+    from . import store
+
+    s = store.get_session(db, sid)
+    if not s or not s["claude_session_id"]:
+        return None
+
+    cwd = os.path.expanduser(s["cwd"])
+    tmux_name = tmux_session_name(sid)
+    settings_path = _write_hooks(sid, cwd)
+    oauth = _get_oauth()
+
+    store.mark_running(db, sid, tmux_name)
+
+    # Create tmux session
+    _tmux("new-session", "-d", "-s", tmux_name, "-x", "220", "-y", "50")
+
+    # Set session env + OAuth
+    _tmux("send-keys", "-t", tmux_name, f"export TQ_SESSION_ID='{sid}'", "Enter")
+    if oauth:
+        _tmux("send-keys", "-t", tmux_name,
+               f"export CLAUDE_CODE_OAUTH_KEY='{oauth}'", "Enter")
+
+    # cd to working directory — must match original cwd
+    # because claude --resume resolves session files by project directory
+    _tmux("send-keys", "-t", tmux_name, f"cd '{cwd}'", "Enter")
+
+    # Launch claude with --resume
+    cmd = f"claude --resume '{s['claude_session_id']}' --settings '{settings_path}' --dangerously-skip-permissions"
+    _tmux("send-keys", "-t", tmux_name, cmd, "Enter")
+
+    return tmux_name
+
+
 def route_message(sid, text):
     """Send a message to an existing session via tmux."""
     tmux_name = tmux_session_name(sid)
