@@ -56,8 +56,8 @@ def connect():
 
 def create_session(db, sid, prompt=None, cwd="~", queue=None, claude_session_id=None):
     db.execute(
-        "INSERT INTO sessions (id, prompt, cwd, status, claude_session_id, created_at) VALUES (?, ?, ?, 'pending', ?, ?)",
-        (sid, prompt, cwd, claude_session_id, _now()),
+        "INSERT INTO sessions (id, prompt, cwd, status, queue, claude_session_id, created_at) VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+        (sid, prompt, cwd, queue, claude_session_id, _now()),
     )
     db.commit()
     return sid
@@ -87,7 +87,7 @@ def mark_done(db, sid):
 
 def mark_running(db, sid, tmux_session):
     db.execute(
-        "UPDATE sessions SET status='running', tmux_session=?, started_at=?, completed_at=NULL WHERE id=?",
+        "UPDATE sessions SET status='running', tmux_session=?, started_at=?, completed_at=NULL WHERE id=? AND status='suspended'",
         (tmux_session, _now(), sid),
     )
     db.commit()

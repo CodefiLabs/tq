@@ -73,8 +73,15 @@ def cmd_stop(args):
     if not s:
         print(f"Unknown session: {args.id}")
         sys.exit(1)
+    if s["status"] not in ("running", "suspended"):
+        print(f"Session {args.id} is not active (status: {s['status']})")
+        sys.exit(1)
     session.stop(args.id)
-    store.mark_done(db, args.id)
+    db.execute(
+        "UPDATE sessions SET status='done', completed_at=? WHERE id=?",
+        (store._now(), args.id),
+    )
+    db.commit()
     print(f"Stopped {args.id}")
 
 
@@ -119,7 +126,7 @@ def cmd_run(args):
         # Single prompt
         sid = session.make_id(target)
         existing = store.get_session(db, sid)
-        if existing and existing["status"] in ("running", "done"):
+        if existing and existing["status"] in ("running", "done", "suspended"):
             print(f"Session {sid} already {existing['status']}, skipping.")
             return
         store.create_session(db, sid, prompt=target, cwd=cwd)
@@ -197,7 +204,7 @@ def run_queue(db, filepath, default_cwd):
     for prompt_text in tasks:
         sid = session.make_id(prompt_text)
         existing = store.get_session(db, sid)
-        if existing and existing["status"] in ("running", "done"):
+        if existing and existing["status"] in ("running", "done", "suspended"):
             continue
 
         if not existing:

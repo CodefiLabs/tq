@@ -213,7 +213,10 @@ def check_idle(db, idle_timeout_minutes=60, activity_grace_minutes=30):
         for line in result.stdout.strip().split("\n"):
             parts = line.split(None, 1)
             if len(parts) == 2:
-                activity[parts[0]] = int(parts[1])
+                try:
+                    activity[parts[0]] = int(parts[1])
+                except ValueError:
+                    continue
 
     now = _time.time()
     grace_secs = activity_grace_minutes * 60
