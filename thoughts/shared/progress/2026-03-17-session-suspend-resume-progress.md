@@ -39,3 +39,19 @@ Made `mark_done` conditional (`AND status='running'`) so the on-stop hook cannot
 ### Notes
 - Race condition resolution: `mark_suspended` runs before `/exit`, then `mark_done` in the on-stop hook matches zero rows because it requires `status='running'`
 - Legacy sessions (no `claude_session_id`) still get marked "done" on death via `check_health`
+
+---
+
+## Phase 3: Resume on Demand
+
+**Completed**: 2026-03-17
+**Status**: COMPLETE
+**Commits**: 3da9046
+**Tests**: PASS
+
+### Summary
+Added `resume()` function in session.py that respawns a suspended session in tmux using `claude --resume` with the stored `claude_session_id`, following the same pattern as `spawn()`. Added `mark_running()` in store.py to transition sessions back to running. Updated daemon routing to auto-resume suspended sessions when a Telegram reply targets them (3-second delay before message delivery). Added `tq resume <id>` CLI subcommand. Added suspended emoji to Telegram `/status` output.
+
+### Notes
+- `mark_running()` has no status guard (intentional — can transition from any state, unlike `mark_done`/`mark_suspended` which guard against races)
+- Resume uses `--resume` flag, not `--session-id` + `--prompt`
