@@ -4,7 +4,7 @@
 
 import { execSync } from "node:child_process";
 
-let tqPath = "tq2";
+let tqPath = "tq";
 
 export function configure(path: string) {
   tqPath = path;

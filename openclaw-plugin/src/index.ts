@@ -15,7 +15,7 @@ export default {
 
   register(api: any) {
     const config = api.pluginConfig ?? {};
-    const tqPath = config.tqPath || "tq2";
+    const tqPath = config.tqPath || "tq";
     const defaultCwd = config.defaultCwd || "~";
 
     tq.configure(tqPath);

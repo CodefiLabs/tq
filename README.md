@@ -1,393 +1,188 @@
-# tq — Task Queue for Claude
+# tq — Claude Code via Telegram
 
-A lightweight task queue runner and conversation manager that spawns Claude AI tasks as independent tmux sessions. Supports both one-off batch queues and persistent interactive conversations via Telegram.
-
-## What It Does
-
-`tq` lets you define a list of Claude prompts in a YAML file and run them all as independent background jobs. Each prompt gets its own named tmux session running the `claude` CLI — you can attach to any session to watch progress, and detach without interrupting the work.
-
-Tasks are idempotent: running `tq queue.yaml` again skips tasks that are already `done` or have a live `running` session. Task identity is derived from a SHA-256 hash of the prompt content, so changing a prompt text treats it as a new task while re-running unchanged prompts is always a no-op.
-
-The tool is designed for macOS with cron scheduling in mind: drop a queue YAML in `~/.tq/queues/`, add a crontab line, and tasks run automatically every morning (or on whatever schedule you choose). Run `tq --status` to reap dead sessions and print a status table.
-
-## Requirements
-
-- macOS (uses `security` CLI for keychain access to Claude OAuth tokens)
-- tmux (`brew install tmux`)
-- `claude` CLI — [Claude Code](https://claude.ai/code) (`npm install -g @anthropic-ai/claude-code` or similar)
-- python3 (macOS system Python is sufficient — stdlib only, no pip installs needed)
-- Google Chrome with Claude Code extension installed
-- `reattach-to-user-namespace` (optional, `brew install reattach-to-user-namespace` — fixes keychain access in tmux)
-
-## Installation
-
-Run this in your terminal:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CodefiLabs/tq/main/scripts/tq-install.sh | bash
-```
-
-Here's exactly what that command does:
-
-1. **Downloads the install script** from this repo over HTTPS (`-fsSL` = fail on error, silent, follow redirects) and pipes it directly to `bash` — nothing is saved to disk.
-
-2. **Registers the codefilabs marketplace** with Claude Code by running `claude plugin marketplace add codefilabs/marketplace`. This clones the marketplace repo into `~/.claude/plugins/marketplaces/codefilabs/` so Claude knows where to find it.
-
-3. **Installs the tq plugin** by running `claude plugin install tq@codefilabs`. This caches the plugin files into `~/.claude/plugins/cache/tq/codefilabs/<version>/` and registers the plugin's skills and slash commands with Claude Code. After this, Claude will recognize commands like `/todo`, `/schedule`, `/jobs`, and `/health`.
-
-4. **Symlinks `tq`** into `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel Mac) so the command is available in your shell and in cron jobs.
-
-5. **Creates `~/.tq/queues/` and `~/.tq/logs/`** — the default directories for queue files and log output.
-
-If `claude` is not on your PATH, steps 2–3 are skipped with a warning and only the CLI tools are installed.
-
-To install the CLI tools to a custom location instead:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/kevnk/tq/main/scripts/tq-install.sh | TQ_INSTALL_DIR=/usr/local/bin bash
-```
-
-## Quick Start
-
-Create a queue file:
-
-```yaml
-# ~/.tq/queues/morning.yaml
-cwd: /Users/yourname/projects/myapp
-
-tasks:
-  - prompt: fix the login bug in the auth service
-  - prompt: write unit tests for the payment module
-  - prompt: |
-      Review the README and update it to reflect
-      the current API endpoints and authentication flow
-```
-
-Run it:
-
-```bash
-tq ~/.tq/queues/morning.yaml
-```
-
-Output:
-
-```
-  [spawned] tq-fix-the-login-451234 -- fix the login bug in the auth service
-  [spawned] tq-write-unit-test-451235 -- write unit tests for the payment module
-  [spawned] tq-review-the-readme-451236 -- Review the README and update it to reflect
-```
-
-Check status:
-
-```bash
-tq --status ~/.tq/queues/morning.yaml
-```
-
-Output:
-
-```
-STATUS     SESSION                   STARTED                PROMPT
----------- ------------------------- ---------------------- ------
-done       tq-fix-the-login-451234   2026-03-06T09:01:02    fix the login bug in the auth service
-running    tq-write-unit-test-451235 2026-03-06T09:01:03    write unit tests for the payment module
-running    tq-review-the-readme-451236 2026-03-06T09:01:04  Review the README and update it to reflect
-```
-
-## Queue File Format
-
-Queue files are standard YAML:
-
-```yaml
-cwd: /path/to/working/directory   # sets working directory for each claude task
-
-tasks:
-  # Inline prompt (single line)
-  - prompt: fix the login bug in auth service
-
-  # Named task — human-readable label for tmux session naming
-  - name: write-tests
-    prompt: write unit tests for the payment module
-
-  # Block literal (|) — preserves line breaks exactly
-  - prompt: |
-      Write comprehensive unit tests for the payment module.
-      Cover happy path and all error cases.
-      Use jest and mock the Stripe API.
-
-  # Block folded (>) — newlines become spaces (like a paragraph)
-  - prompt: >
-      Refactor the authentication service to use JWT tokens
-      instead of session cookies, updating all dependent endpoints.
-
-  # Quoted inline
-  - prompt: "update the README's installation section"
-```
-
-Queue files are **never modified** by `tq` — they are read-only inputs.
-
-### Notifications (optional)
-
-Add a `message:` block to receive a notification when each task completes:
-
-```yaml
-cwd: /Users/yourname/projects/myapp
-message:
-  service: telegram       # telegram | slack
-  content: summary        # summary | status | details | log
-tasks:
-  - prompt: refactor the auth module
-```
-
-**Content types:**
-- `summary` — Claude writes a 2–3 sentence digest of what it accomplished
-- `status` — task name, done/failed, duration (no live Claude session needed)
-- `details` — prompt first line, status, duration, hash
-- `log` — last 200 lines of tmux pane scrollback
-
-The `message:` block overrides the global config for that queue. Global credentials (bot tokens etc.) live in `~/.tq/config/message.yaml` — never in queue files. Run `/setup-telegram` to configure Telegram notifications interactively.
-
-## Commands
-
-### `tq <queue.yaml>`
-
-Parses the queue file and spawns a new tmux session for each pending task.
-
-- Skips tasks with `status=done`
-- Skips tasks with `status=running` that have a live tmux session
-- Flips tasks with `status=running` but a dead tmux session to `done`, then skips them
-- Spawns all remaining (pending) tasks as new tmux sessions
-
-```bash
-tq ~/.tq/queues/morning.yaml
-```
-
-### `tq --status <queue.yaml>`
-
-Prints a formatted status table for all tasks in the queue. Also reaps any dead tmux sessions by flipping their state from `running` to `done`.
-
-```bash
-tq --status ~/.tq/queues/morning.yaml
-```
-
-Run this via cron every 30 minutes to keep state accurate even if sessions die unexpectedly.
-
-### `tq --prompt <text>`
-
-Run a single ad-hoc prompt without a queue file. Useful for one-off tasks.
-
-```bash
-tq --prompt "fix the login bug in auth service" --cwd ~/projects/myapp --name fix-login
-```
-
-Options:
-- `--prompt <text>` — the prompt to run (required for this mode)
-- `--cwd <dir>` — working directory (defaults to `~/.tq/workspace`)
-- `--name <name>` — label for tmux session naming (defaults to `adhoc`)
-- `--notify <type>` — completion notification: `macos`, `bell`, or a path to a shell script
+Send a message. Get a Claude Code session. Reply to continue.
 
 ## How It Works
 
-**Step 1 — Parse**: `tq` runs an embedded Python script (written to a temp file) that reads the queue YAML and generates three files per task, all named by an 8-character SHA-256 hash of the prompt:
-
-- `<hash>.prompt` — the raw prompt text
-- `<hash>.launch.py` — a small Python launcher that `execvp`s into `claude` (replacing itself with the claude process so the tmux window ends up running claude directly)
-- `~/.tq/sessions/<hash>/settings.json` — Claude settings registering a Stop hook
-
-**Step 2 — Auth capture**: The Python parser reads the Claude OAuth token from the macOS keychain (`security find-generic-password -s 'Claude Code-credentials'`) and bakes it into the launcher script. This means each task has its credentials embedded and can run unattended even in a cron context.
-
-**Step 3 — Spawn**: For each pending task, `tq` creates a named tmux session (`tq-<slug>-<epoch>`) and sends `python3 <hash>.launch.py` to it via `tmux send-keys`. The launcher runs inside the tmux window, then `execvp`s into `claude --dangerously-skip-permissions --chrome <prompt>`, replacing itself so the window ends up running a live `claude` session.
-
-**Step 4 — Completion**: When `claude` finishes, the Stop hook (`on-stop.sh`) fires automatically and updates the task's state file: `status=running` → `status=done`. The next `tq` run will skip this task.
-
-## Claude Code Plugin
-
-`tq` ships with a Claude skill definition at `skills/tq/SKILL.md`. Install it into Claude by copying or symlinking the `skills/tq/` directory into `~/.claude/skills/tq/`.
-
-Once installed, Claude can manage your task queues via slash commands:
-
-| Command | Purpose |
-|---------|---------|
-| `/init [dirs...]` | Scan workspace directories and build a project catalog for `cwd:` lookup |
-| `/todo <natural language>` | Create or update a queue and optionally schedule it |
-| `/schedule <natural language>` | Add or update a cron schedule for a queue |
-| `/pause <queue>` | Remove the run cron line (keep status-check) |
-| `/unschedule <queue>` | Remove all cron lines for a queue |
-| `/jobs` | List all scheduled tq cron jobs |
-| `/health` | System-wide diagnostics |
-| `/setup-telegram` | Interactive wizard to configure Telegram notifications |
-| `/install` | Symlink tq binaries to PATH |
-| `/converse [start\|stop\|status]` | Manage Telegram conversation sessions |
-| `/tq-reply` | Send a response back to Telegram (used by Claude in conversation mode) |
-
-Claude will infer the queue name from context: "every morning" → `morning.yaml`, "daily" → `daily.yaml`, or the current directory's basename if no schedule keyword is present.
-
-### `/init` — Workspace setup
-
-Run `/init` once per machine to tell tq where your projects live:
-
 ```
-/init ~/Sites ~/Projects
+You (Telegram)  →  tq daemon  →  tmux session  →  Claude Code
+                ←             ←                ←  /tq-reply
 ```
 
-This scans the given directories for git repositories, writes `~/.tq/config/workspaces.yaml` (which directories to scan), and generates `~/.tq/workspace-map.md` (a catalog of every discovered project with its path and type). Re-run `/init` anytime to refresh after cloning new repos.
+Every Telegram message spawns a Claude Code session in tmux.
+Reply to the bot's response to continue that conversation.
+Send a new message to start a new session.
 
-Once initialized, `/todo` uses the workspace map to resolve project names in natural language — e.g. "fix the login bug in myapp" will automatically set `cwd:` to myapp's full path.
+Two routing rules. That's the whole system.
 
-## State Files
+## Requirements
 
-State is stored in `.tq/` directories adjacent to the queue YAML file:
+- macOS (uses `security` CLI for keychain OAuth)
+- Python 3 (stdlib only — no pip install)
+- tmux
+- `claude` CLI ([Claude Code](https://claude.ai/code))
+- A Telegram bot token (from [@BotFather](https://t.me/BotFather))
 
-```
-~/.tq/queues/
-├── morning.yaml              ← your queue file
-└── .tq/
-    └── morning/
-        ├── a1b2c3d4          ← task state file (key=value)
-        ├── a1b2c3d4.prompt   ← raw prompt text
-        ├── a1b2c3d4.launch.py ← generated launcher (contains OAuth token)
-        └── ...
-```
-
-Each state file looks like:
-
-```
-status=done
-session=tq-fix-the-login-451234
-window=fix-the
-prompt=fix the login bug in auth service
-started=2026-03-06T09:01:02
-```
-
-**Resetting tasks:**
+## Setup
 
 ```bash
-# Reset one task (tq will re-run it next time)
-rm ~/.tq/queues/.tq/morning/a1b2c3d4
+# 1. Configure Telegram
+tq setup
 
-# Reset entire queue
-rm -rf ~/.tq/queues/.tq/morning/
+# 2. Start the daemon
+tq daemon start
+
+# 3. Send a message to your bot on Telegram
 ```
 
-## Security Notes
+That's it. You're running Claude Code from your phone.
 
-The `.tq/` directories contain live OAuth tokens written in plaintext into `*.launch.py` launcher files at runtime. These files are ephemeral and local-only, but:
-
-- **Never commit `.tq/` directories to git** — they contain your Claude auth tokens
-- Add `.tq/` to your `.gitignore` if your queue files are inside a git repository
-
-The `--dangerously-skip-permissions` flag is passed to every Claude session. This is required for unattended automation — without it, Claude would prompt for permission confirmations that no human is present to answer.
-
-## Scheduling
-
-Add cron entries to run your queues automatically:
+## Installation
 
 ```bash
-crontab -e
+# From the repo root:
+bash migrate-v1-to-v2.sh
 ```
 
-```cron
-# Run morning queue at 9am daily
-0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
+This installs a `tq` wrapper to `/opt/homebrew/bin/` (or set `TQ_INSTALL_DIR`).
 
-# Sweep dead sessions every 30 minutes (keeps status accurate)
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-```
-
-Logs accumulate in `~/.tq/logs/tq.log`.
-
-See `skills/tq/references/cron-expressions.md` for a natural language → cron expression reference.
-
-## Conversation Mode (Telegram)
-
-Conversation mode enables interactive, back-and-forth conversations with Claude Code via Telegram. An orchestrator Claude session routes your messages to the appropriate conversation, automatically creating new sessions for new topics and resuming existing ones.
-
-### Setup
-
-1. Configure Telegram: run `/setup-telegram` in Claude Code (or `tq-setup`)
-2. Add the polling cron job:
-   ```bash
-   * * * * * /opt/homebrew/bin/tq-telegram-poll >> ~/.tq/logs/tq-telegram.log 2>&1
-   ```
-
-### Starting Conversations
-
-Send `/converse` from Telegram (or run `tq-converse start` from CLI). This launches the orchestrator.
-
-Once the orchestrator is running, just send messages normally. The orchestrator will:
-- **New topic** → create a new conversation session with a descriptive slug (e.g., `fix-auth-bug`)
-- **Related to existing** → route to the appropriate session
-- **Telegram reply** → automatically route to the conversation that sent the original message
-- **Explicit routing** → prefix with `#slug-name` to target a specific session
-
-### Example Flow
-
-```
-You:     "fix the login bug in the auth module"
-tq:      [new: fix-auth] Started conversation: Fix login bug in auth module
-
-You:     "what did you find?"
-tq:      [fix-auth] Found 3 issues in src/auth.py: ...
-
-You:     "refactor the payment service to use Stripe v2"
-tq:      [new: refactor-payments] Started conversation: Refactor payment service for Stripe v2
-
-You:     #fix-auth "also check the password reset flow"
-tq:      [fix-auth] Checking password reset flow...
-```
-
-### Telegram Commands
-
-| Command | Purpose |
-|---------|---------|
-| `/converse` | Start the orchestrator |
-| `/stop` | Stop the orchestrator |
-| `/stop <slug>` | Stop a specific conversation |
-| `/status` | Show all sessions |
-| `/list` | List active conversations |
-
-### How It Works
-
-1. **tq-telegram-poll** runs every minute via cron, fetches new Telegram messages
-2. **3-tier routing** determines where each message goes:
-   - Tier 1: Telegram reply → deterministic lookup via registry message ID mapping
-   - Tier 2: `#slug` prefix → route directly to named session
-   - Tier 3: Send to orchestrator Claude for smart routing
-3. **Orchestrator** (a persistent Claude Code session) reads the conversation registry, decides whether to route to an existing session or spawn a new one
-4. **Child sessions** (each a persistent Claude Code interactive session) process messages and respond via `/tq-reply`
-5. **Responses** are sent back to Telegram as threaded replies, with the session slug as a label
-
-### State
-
-Conversation state lives in `~/.tq/conversations/`:
-
-```
-~/.tq/conversations/
-├── registry.json           ← session registry (slugs, descriptions, message IDs)
-├── orchestrator/           ← orchestrator Claude settings and instructions
-│   ├── .tq-orchestrator.md
-│   ├── settings.json
-│   └── hooks/
-└── sessions/
-    ├── fix-auth/           ← per-session state
-    │   ├── .tq-converse.md
-    │   ├── settings.json
-    │   ├── current-slug
-    │   ├── reply-to-msg-id
-    │   ├── inbox/          ← received messages (timestamped)
-    │   └── outbox/         ← sent responses (timestamped)
-    └── refactor-payments/
-        └── ...
-```
-
-### CLI Commands
+Or manually:
 
 ```bash
-tq-converse start                    # start orchestrator
-tq-converse spawn <slug> [opts]      # create a child session
-tq-converse route <slug> <message>   # send to a session
-tq-converse send <message>           # send to orchestrator
-tq-converse list                     # list active sessions
-tq-converse status                   # show all session details
-tq-converse stop [<slug>]            # stop session or orchestrator
-tq-converse registry                 # dump the session registry
+# Create a wrapper script
+cat > /opt/homebrew/bin/tq <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+TQ_ROOT="/path/to/tq/repo"
+export PYTHONPATH="$TQ_ROOT:${PYTHONPATH:-}"
+exec python3 -m tq "$@"
+EOF
+chmod +x /opt/homebrew/bin/tq
 ```
+
+## CLI
+
+```
+tq daemon start|stop|status   Start/stop the Telegram daemon
+tq status                     List all sessions
+tq stop <id>                  Kill a session
+tq run <prompt> [--cwd DIR]   One-shot session (no Telegram)
+tq run queue.yaml [--cwd DIR] Batch sessions from YAML
+tq reply <id> <text>          Send reply to Telegram (internal)
+tq setup                      Configure Telegram bot
+```
+
+## Queue Files
+
+For batch automation without Telegram:
+
+```yaml
+cwd: ~/project
+tasks:
+  - Review yesterday's commits
+  - Run the test suite
+  - Add documentation
+```
+
+```bash
+tq run morning.yaml
+```
+
+Optional features:
+- `schedule: "0 9 * * *"` — cron scheduling
+- `reset: daily` — auto-clear state so tasks re-run
+- `sequential: true` — run tasks one at a time in order
+
+## State
+
+Everything lives in `~/.tq/`:
+
+```
+~/.tq/
+  tq.db          SQLite database (all sessions + messages)
+  config.json    Telegram bot token + chat ID
+  hooks/<id>/    Generated per-session hooks (runtime)
+  daemon.pid     Daemon process ID
+  daemon.log     Daemon output
+```
+
+One database. One config file. No scattered state directories.
+
+## Plugins
+
+tq works as both a **Claude Code plugin** and an **OpenClaw plugin**.
+
+### Claude Code
+
+Install the plugin to get the `/tq-reply` slash command:
+
+```bash
+claude plugin install /path/to/tq
+```
+
+Claude sessions spawned by tq use `/tq-reply` to send responses back to Telegram.
+
+### OpenClaw
+
+Install as an OpenClaw plugin for multi-channel support:
+
+```bash
+openclaw plugins install /path/to/tq/openclaw-plugin
+```
+
+Provides 3 tools (`tq_run`, `tq_status`, `tq_stop`), a health-check service,
+and auto-injects active session context into agent prompts.
+
+## Architecture
+
+```
+tq/
+  __init__.py     Version
+  __main__.py     python -m tq entry point
+  cli.py          320 lines  Entry point + queue parser
+  daemon.py       183 lines  Telegram long-poll + health
+  session.py      149 lines  tmux lifecycle + hooks
+  store.py        104 lines  SQLite (2 tables)
+  telegram.py      63 lines  Bot API
+
+.claude-plugin/            Claude Code plugin
+.claude/commands/          /tq-reply slash command
+skills/tq/                 Skill definition
+
+openclaw-plugin/           OpenClaw plugin
+  src/index.ts             3 tools + 1 service + 1 hook
+  src/tq-bridge.ts         CLI bridge
+```
+
+~820 lines of Python. ~150 lines of TypeScript. Zero external dependencies.
+
+## Migrating from v1
+
+If you're upgrading from tq v1 (the bash version):
+
+```bash
+bash migrate-v1-to-v2.sh
+```
+
+The migration script:
+1. Stops v1 processes and removes v1 symlinks
+2. Cleans v1 crontab entries
+3. Removes v1 files (`scripts/`, `tools/`, `docs/`, etc.)
+4. Promotes `v2/` contents to repo root
+5. Renames all `tq2` references to `tq`
+6. Installs a `tq` wrapper to PATH
+7. Preserves `~/.tq/` runtime state
+
+**v1 state (`~/.tq/queues/.tq/`)** is not migrated — v2 uses SQLite (`~/.tq/tq.db`).
+If you had v1 queue files, they still work with `tq run queue.yaml`.
+
+## Security
+
+- OAuth tokens read from macOS keychain at runtime — never stored in files
+- `--dangerously-skip-permissions` is required for headless automation
+- Telegram bot token lives in `~/.tq/config.json` — never commit this
+- SQLite database may contain message text — treat `~/.tq/` as private
+
+## License
+
+MIT

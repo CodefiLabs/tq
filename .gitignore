@@ -1,5 +1,9 @@
-# Runtime task dirs — contain plaintext OAuth tokens
+# Runtime state — contains OAuth tokens
 .tq/
 
+# Python
+__pycache__/
+*.pyc
+
+# AI onboarding scratch
 .ai-onboard-scratch/
-v2/tq/__pycache__/

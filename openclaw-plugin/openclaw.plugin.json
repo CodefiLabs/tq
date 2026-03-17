@@ -14,13 +14,13 @@
       },
       "tqPath": {
         "type": "string",
-        "default": "tq2",
-        "description": "Path to tq2 CLI binary"
+        "default": "tq",
+        "description": "Path to tq CLI binary"
       }
     }
   },
   "uiHints": {
     "defaultCwd": { "label": "Default Working Directory", "placeholder": "~/Sites/myproject" },
-    "tqPath": { "label": "tq2 Binary Path", "placeholder": "tq2 or /opt/homebrew/bin/tq2" }
+    "tqPath": { "label": "tq Binary Path", "placeholder": "tq or /opt/homebrew/bin/tq" }
   }
 }

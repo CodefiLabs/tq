@@ -1,136 +1,84 @@
-# CLAUDE.md — tq
+# CLAUDE.md — tq v2
 
-## Project Overview
+## Overview
 
-`tq` is a pure Bash + embedded Python 3 CLI tool that manages Claude Code sessions via tmux. It operates in two modes:
+`tq` spawns Claude Code sessions in tmux, controlled via Telegram.
+Every message = a session. Reply to continue. That's it.
 
-1. **Queue mode** — batches Claude Code prompts into YAML queue files and spawns each as an independent tmux session. Tasks are idempotent: re-running `tq` skips tasks that are already `done` or have a live `running` session.
-2. **Conversation mode** — maintains persistent interactive Claude Code sessions orchestrated via Telegram. An orchestrator Claude session routes incoming messages to the appropriate conversation, spawning new sessions or resuming existing ones.
-
-Designed for macOS power users who want to schedule, queue, and converse with Claude tasks via cron and Telegram.
-
-## Tech Stack
-
-- **Bash** (primary) — requires bash 3.2+ (macOS default); `set -euo pipefail` throughout
-- **Python 3** — embedded inline via heredoc temp file for YAML parsing, state management, and launcher generation; stdlib only (`sys`, `os`, `hashlib`, `re`, `json`, `stat`, `subprocess`)
-- **No package manager** — zero npm/pip/cargo dependencies; no build step
-- **Runtime deps**: `tmux`, `claude` CLI, `python3`, macOS `security` CLI, Google Chrome, `reattach-to-user-namespace` (optional Homebrew, for tmux keychain)
+Pure Python. Zero external dependencies. ~800 lines across 5 files.
 
 ## Architecture
 
 ```
 tq/
-  scripts/
-    tq                  # Queue runner + status reporter (--status flag)
-    tq-converse         # Conversation mode: orchestrator + multi-session manager
-    tq-message          # Notification delivery (Telegram/Slack)
-    tq-telegram-poll    # Polls Telegram for messages, routes to orchestrator or spawns tasks
-    tq-telegram-watchdog # Ensures poll cron entry exists
-    tq-cron-sync        # Syncs queue schedule: keys to crontab
-    tq-setup            # Interactive setup wizard
-    tq-install.sh       # Installer: symlinks into /opt/homebrew/bin
-  skills/
-    tq/
-      SKILL.md          # Claude plugin skill definition
-      references/
-        cron-expressions.md
-        session-naming.md
-  .claude/commands/
-    tq-reply.md         # Slash command: Claude sends response back to Telegram
-    converse.md         # Slash command: manage conversation sessions
-    tq-message.md       # Slash command: write task completion summary
-    ...                 # Other slash commands (todo, schedule, etc.)
-  .claude-plugin/
-    plugin.json         # Plugin metadata (name, version, license)
+  cli.py        # entry point + subcommands + queue parser
+  daemon.py     # telegram long-poll + tmux health loop
+  session.py    # tmux spawn/stop/route + hook generation
+  store.py      # SQLite schema + queries (2 tables)
+  telegram.py   # Bot API send/receive/react
+
+~/.tq/
+  tq.db         # all state (SQLite with WAL)
+  config.json   # telegram bot token, chat_id, default_cwd
+  hooks/<id>/   # generated per-session hooks (runtime only)
+  daemon.pid    # daemon process ID
+  daemon.log    # daemon stdout/stderr
 ```
 
-**Three separate state locations — do not confuse:**
-- `<queue-dir>/.tq/<queue-basename>/<hash>` — task state files (status, session, prompt, started)
-- `~/.tq/sessions/<hash>/` — per-task Claude settings.json + hooks/on-stop.sh
-- `~/.tq/conversations/` — conversation mode state (registry, session dirs, orchestrator)
+One state location. One config file. One daemon process.
 
-**Queue mode data flow:** YAML queue file → Python parser (temp file) → `<hash>.prompt`, `<hash>.launch.py` → tmux session → `claude --dangerously-skip-permissions --chrome <prompt>` → Stop hook (`on-stop.sh`) marks `status=done`
-
-**Conversation mode data flow:** Telegram message → `tq-telegram-poll` → 3-tier routing (reply threading / #slug / orchestrator) → `tq-converse route <slug>` → tmux send-keys into child session → Claude processes → `/tq-reply` → `tq-message --reply-to` → Telegram response (threaded)
-
-## Development Commands
+## Development
 
 ```bash
-# Install (symlinks scripts into /opt/homebrew/bin or /usr/local/bin)
-bash "$(git rev-parse --show-toplevel)/scripts/tq-install.sh"
-# Override target: TQ_INSTALL_DIR=/usr/local/bin bash scripts/tq-install.sh
+# Run CLI
+python3 -m tq --help
+python3 -m tq status
+python3 -m tq run "fix the bug" --cwd ~/project
 
-# Run a queue
-tq ~/.tq/queues/morning.yaml
+# Run daemon in foreground (for debugging)
+python3 -m tq daemon start --foreground
 
-# Check status / reap dead sessions
-tq --status ~/.tq/queues/morning.yaml
-
-# Schedule via cron (crontab -e)
-0 9 * * * /opt/homebrew/bin/tq ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-*/30 * * * * /opt/homebrew/bin/tq --status ~/.tq/queues/morning.yaml >> ~/.tq/logs/tq.log 2>&1
-
-# Reset one task (delete state file — tq will re-run it)
-rm ~/.tq/queues/.tq/morning/a1b2c3d4
-
-# Reset entire queue
-rm -rf ~/.tq/queues/.tq/morning/
-
-# Lint bash scripts
-shellcheck scripts/tq scripts/tq-install.sh
-
-# Start conversation mode (orchestrator)
-tq-converse start
-
-# Spawn a conversation session
-tq-converse spawn fix-auth --cwd ~/Sites/myproject --desc "Fix authentication bug"
-
-# Route a message to a session
-tq-converse route fix-auth "check the login flow"
-
-# List active conversations
-tq-converse list
-
-# Check all session status
-tq-converse status
-
-# Stop a conversation
-tq-converse stop fix-auth
+# Run daemon in background
+python3 -m tq daemon start
+python3 -m tq daemon status
+python3 -m tq daemon stop
 ```
 
-## Code Style & Conventions
+## Data Model
 
-See `.claude/rules/naming.md` for full naming conventions and examples.
+Two SQLite tables:
+- `sessions` — id, prompt, cwd, status, tmux_session, queue, timestamps
+- `messages` — telegram_msg_id, session_id, direction (in/out), text, timestamp
 
-## Testing
+## Routing Rules
 
-No tests exist. See `.claude/rules/testing.md` for test targets and recommended approach.
+1. Reply-to a tracked message → route to that session
+2. Anything else → spawn new session
 
-Until tests exist, limit each change to a single function or code block. After any edit to `scripts/tq`, run `bash scripts/tq <queue.yaml>` and confirm no errors before proceeding.
+## Plugins
 
-## Git Conventions
+**Claude Code plugin** — `.claude-plugin/`, `.claude/commands/tq-reply.md`, `skills/tq/SKILL.md`
+**OpenClaw plugin** — `openclaw-plugin/` with 3 tools, 1 service, 1 hook
 
-- Single `main` branch
-- Short lowercase imperative commit messages: `add tq-cli scripts and Claude plugin structure`
-- No "Generated with" or "Co-authored-by" suffixes in commit messages
-- Commit selectively — never `git add -A`
+## Queue Files (Optional)
+
+```yaml
+cwd: ~/project
+tasks:
+  - Review yesterday's commits
+  - Run the test suite
+```
+
+Supports: `schedule`, `reset` (daily/weekly/hourly/always), `sequential`.
 
 ## Guardrails
 
-Critical rules — violations break the tool or expose credentials:
+- **Hash stability** — `hashlib.sha256(prompt.encode()).hexdigest()[:8]` is the session ID
+- **OAuth from keychain** — never hardcode tokens; `security find-generic-password` at runtime
+- **`--dangerously-skip-permissions`** — required for headless automation, do not remove
+- **tmux load-buffer** — always use load-buffer + paste-buffer for message injection (safe for special chars)
 
-- **`sed -i ''` syntax** — macOS BSD sed requires the empty string; `sed -i` (no quotes) is GNU syntax and will fail or create backup files
-- **`#!/usr/bin/env bash`** — never use `#!/bin/bash`; applies to source scripts and heredoc-generated scripts alike
-- **`os.execvp()` in launchers is intentional** — process replacement, not subprocess; do not change to `subprocess.run()`
-- **Hash stability** — `hashlib.sha256(prompt.encode()).hexdigest()[:8]` is the stable task ID; changing it orphans all existing state files
-- **`.tq/` is in `.gitignore`** — never override this, never use `git add -f` on these paths; `*.launch.py` files contain live OAuth tokens
+## Git
 
-See `.claude/rules/anti-patterns.md` for full examples.
-
-## Security
-
-See `.claude/rules/security.md` for credential and token handling rules.
-
-## Maintenance
-
-- Add tests before making logic changes to the YAML parser or idempotency state machine
+- Short lowercase imperative commit messages
+- Commit selectively — never `git add -A`
