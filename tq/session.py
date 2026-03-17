@@ -197,6 +197,43 @@ def check_health(db):
     return dead
 
 
+def check_idle(db, idle_timeout_minutes=60, activity_grace_minutes=30):
+    """Suspend sessions that are idle (no messages + no tmux activity)."""
+    from . import store
+    import time as _time
+
+    candidates = store.idle_running_sessions(db, idle_timeout_minutes)
+    if not candidates:
+        return []
+
+    # Get tmux activity timestamps
+    result = _tmux("list-sessions", "-F", "#{session_name} #{session_activity}")
+    activity = {}
+    if result.returncode == 0:
+        for line in result.stdout.strip().split("\n"):
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                activity[parts[0]] = int(parts[1])
+
+    now = _time.time()
+    grace_secs = activity_grace_minutes * 60
+    suspended = []
+
+    for s in candidates:
+        tmux_name = s["tmux_session"]
+        if not tmux_name:
+            continue
+        # Check tmux activity — don't suspend if recent output
+        last_activity = activity.get(tmux_name, 0)
+        if now - last_activity < grace_secs:
+            continue
+        # Both conditions met: no messages + no tmux activity
+        suspend(db, s["id"])
+        suspended.append(s["id"])
+
+    return suspended
+
+
 def make_id(text):
     """Deterministic 8-char hash from text."""
     return hashlib.sha256(text.encode()).hexdigest()[:8]

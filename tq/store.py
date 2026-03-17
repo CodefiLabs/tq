@@ -127,6 +127,19 @@ def track_message(db, telegram_msg_id, session_id, direction, text):
     db.commit()
 
 
+def idle_running_sessions(db, idle_minutes=60):
+    """Find running sessions with no messages for idle_minutes."""
+    return db.execute("""
+        SELECT s.*, MAX(m.created_at) as last_message_at
+        FROM sessions s
+        LEFT JOIN messages m ON m.session_id = s.id
+        WHERE s.status = 'running'
+        GROUP BY s.id
+        HAVING last_message_at IS NULL
+           OR last_message_at < datetime('now', ? || ' minutes')
+    """, (f"-{idle_minutes}",)).fetchall()
+
+
 def lookup_message(db, telegram_msg_id):
     row = db.execute(
         "SELECT session_id FROM messages WHERE telegram_msg_id=?",
