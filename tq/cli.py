@@ -78,6 +78,19 @@ def cmd_stop(args):
     print(f"Stopped {args.id}")
 
 
+def cmd_suspend(args):
+    db = store.connect()
+    s = store.get_session(db, args.id)
+    if not s:
+        print(f"Unknown session: {args.id}")
+        sys.exit(1)
+    if s["status"] != "running":
+        print(f"Session {args.id} is not running (status: {s['status']})")
+        sys.exit(1)
+    session.suspend(db, args.id)
+    print(f"Suspended {args.id}")
+
+
 def cmd_run(args):
     db = store.connect()
     target = args.target
@@ -283,6 +296,10 @@ def main():
     p = sub.add_parser("stop")
     p.add_argument("id")
 
+    # suspend
+    p = sub.add_parser("suspend")
+    p.add_argument("id")
+
     # run
     p = sub.add_parser("run")
     p.add_argument("target", nargs="?")
@@ -309,6 +326,7 @@ def main():
         "daemon": cmd_daemon,
         "status": cmd_status,
         "stop": cmd_stop,
+        "suspend": cmd_suspend,
         "run": cmd_run,
         "reply": cmd_reply,
         "_mark-done": cmd_mark_done,

@@ -135,13 +135,29 @@ def stop(sid):
             _tmux("kill-session", "-t", tmux_name)
 
 
+def suspend(db, sid):
+    """Suspend a session — stop claude, keep session resumable."""
+    from . import store
+
+    store.mark_suspended(db, sid)  # Mark BEFORE stopping, so on-stop hook can't override
+    tmux_name = tmux_session_name(sid)
+    if _session_exists(tmux_name):
+        _tmux("send-keys", "-t", tmux_name, "/exit", "Enter")
+        import time; time.sleep(2)
+        if _session_exists(tmux_name):
+            _tmux("kill-session", "-t", tmux_name)
+
+
 def check_health(db):
-    """Check all running sessions, mark dead ones done."""
+    """Check all running sessions, mark dead ones suspended (or done if not resumable)."""
     from . import store
     dead = []
     for s in store.running_sessions(db):
         if s["tmux_session"] and not _session_exists(s["tmux_session"]):
-            store.mark_done(db, s["id"])
+            if s["claude_session_id"]:
+                store.mark_suspended(db, s["id"])
+            else:
+                store.mark_done(db, s["id"])
             dead.append(s["id"])
     return dead
 
