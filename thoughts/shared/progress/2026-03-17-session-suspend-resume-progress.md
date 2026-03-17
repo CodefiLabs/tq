@@ -23,3 +23,19 @@ Added `claude_session_id` column to the sessions table via a `_migrate()` helper
 
 ### Notes
 - `sqlite3.Row` does not support `.get()` — use `s["claude_session_id"]` with truthiness check instead
+
+---
+
+## Phase 2: Suspend Infrastructure
+
+**Completed**: 2026-03-17
+**Status**: COMPLETE
+**Commits**: ea1d04c
+**Tests**: PASS
+
+### Summary
+Made `mark_done` conditional (`AND status='running'`) so the on-stop hook cannot overwrite a "suspended" status. Added `mark_suspended()` in store.py. Added `suspend()` in session.py that marks suspended BEFORE sending `/exit` to win the race against the on-stop hook. Updated `check_health()` to mark orphaned sessions as "suspended" if they have a `claude_session_id` (resumable) or "done" if they don't (legacy). Added `tq suspend <id>` CLI command with proper validation.
+
+### Notes
+- Race condition resolution: `mark_suspended` runs before `/exit`, then `mark_done` in the on-stop hook matches zero rows because it requires `status='running'`
+- Legacy sessions (no `claude_session_id`) still get marked "done" on death via `check_health`
