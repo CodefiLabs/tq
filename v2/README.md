@@ -27,26 +27,49 @@ Two routing rules. That's the whole system.
 
 ```bash
 # 1. Configure Telegram
-python3 tq2 setup
+tq setup
 
 # 2. Start the daemon
-python3 tq2 daemon start
+tq daemon start
 
 # 3. Send a message to your bot on Telegram
 ```
 
 That's it. You're running Claude Code from your phone.
 
+## Installation
+
+```bash
+# From the repo root:
+bash migrate-v1-to-v2.sh
+```
+
+This installs a `tq` wrapper to `/opt/homebrew/bin/` (or set `TQ_INSTALL_DIR`).
+
+Or manually:
+
+```bash
+# Create a wrapper script
+cat > /opt/homebrew/bin/tq <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+TQ_ROOT="/path/to/tq/repo"
+export PYTHONPATH="$TQ_ROOT:${PYTHONPATH:-}"
+exec python3 -m tq "$@"
+EOF
+chmod +x /opt/homebrew/bin/tq
+```
+
 ## CLI
 
 ```
-tq2 daemon start|stop|status   Start/stop the Telegram daemon
-tq2 status                     List all sessions
-tq2 stop <id>                  Kill a session
-tq2 run <prompt> [--cwd DIR]   One-shot session (no Telegram)
-tq2 run queue.yaml [--cwd DIR] Batch sessions from YAML
-tq2 reply <id> <text>          Send reply to Telegram (internal)
-tq2 setup                      Configure Telegram bot
+tq daemon start|stop|status   Start/stop the Telegram daemon
+tq status                     List all sessions
+tq stop <id>                  Kill a session
+tq run <prompt> [--cwd DIR]   One-shot session (no Telegram)
+tq run queue.yaml [--cwd DIR] Batch sessions from YAML
+tq reply <id> <text>          Send reply to Telegram (internal)
+tq setup                      Configure Telegram bot
 ```
 
 ## Queue Files
@@ -62,7 +85,7 @@ tasks:
 ```
 
 ```bash
-tq2 run morning.yaml
+tq run morning.yaml
 ```
 
 Optional features:
@@ -94,7 +117,7 @@ tq works as both a **Claude Code plugin** and an **OpenClaw plugin**.
 Install the plugin to get the `/tq-reply` slash command:
 
 ```bash
-claude plugin install /path/to/tq/v2
+claude plugin install /path/to/tq
 ```
 
 Claude sessions spawned by tq use `/tq-reply` to send responses back to Telegram.
@@ -104,7 +127,7 @@ Claude sessions spawned by tq use `/tq-reply` to send responses back to Telegram
 Install as an OpenClaw plugin for multi-channel support:
 
 ```bash
-openclaw plugins install /path/to/tq/v2/openclaw-plugin
+openclaw plugins install /path/to/tq/openclaw-plugin
 ```
 
 Provides 3 tools (`tq_run`, `tq_status`, `tq_stop`), a health-check service,
@@ -113,25 +136,45 @@ and auto-injects active session context into agent prompts.
 ## Architecture
 
 ```
-v2/
-  tq/
-    cli.py        320 lines  Entry point + queue parser
-    daemon.py     183 lines  Telegram long-poll + health
-    session.py    149 lines  tmux lifecycle + hooks
-    store.py      104 lines  SQLite (2 tables)
-    telegram.py    63 lines  Bot API
-  tq2                        CLI entry point
+tq/
+  __init__.py     Version
+  __main__.py     python -m tq entry point
+  cli.py          320 lines  Entry point + queue parser
+  daemon.py       183 lines  Telegram long-poll + health
+  session.py      149 lines  tmux lifecycle + hooks
+  store.py        104 lines  SQLite (2 tables)
+  telegram.py      63 lines  Bot API
 
-  .claude-plugin/            Claude Code plugin
-  .claude/commands/          /tq-reply slash command
-  skills/tq/                 Skill definition
+.claude-plugin/            Claude Code plugin
+.claude/commands/          /tq-reply slash command
+skills/tq/                 Skill definition
 
-  openclaw-plugin/           OpenClaw plugin
-    src/index.ts             3 tools + 1 service + 1 hook
-    src/tq-bridge.ts         CLI bridge
+openclaw-plugin/           OpenClaw plugin
+  src/index.ts             3 tools + 1 service + 1 hook
+  src/tq-bridge.ts         CLI bridge
 ```
 
 ~820 lines of Python. ~150 lines of TypeScript. Zero external dependencies.
+
+## Migrating from v1
+
+If you're upgrading from tq v1 (the bash version):
+
+```bash
+bash migrate-v1-to-v2.sh
+```
+
+The migration script:
+1. Stops v1 processes and removes v1 symlinks
+2. Cleans v1 crontab entries
+3. Removes v1 files (`scripts/`, `tools/`, `docs/`, etc.)
+4. Promotes `v2/` contents to repo root
+5. Renames all `tq2` references to `tq`
+6. Installs a `tq` wrapper to PATH
+7. Preserves `~/.tq/` runtime state
+
+**v1 state (`~/.tq/queues/.tq/`)** is not migrated — v2 uses SQLite (`~/.tq/tq.db`).
+If you had v1 queue files, they still work with `tq run queue.yaml`.
 
 ## Security
 
