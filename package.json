@@ -1,6 +1,6 @@
 {
   "name": "@codefilabs/tq",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Claude Code sessions via Telegram + tmux",
   "bin": {
     "tq": "bin/tq"
