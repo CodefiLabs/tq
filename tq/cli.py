@@ -160,31 +160,103 @@ def run_queue(db, filepath, default_cwd):
         if m:
             reset_mode = m.group(1).strip()
 
-    # Parse tasks
+    # Parse tasks — handle name/prompt pairs and block scalars (| and >)
     tasks = []
     i = 0
     while i < len(lines):
         line = lines[i]
-        # Match task list items
-        m = re.match(r'^\s+-\s+(?:prompt:\s*)?(.+)', line)
+
+        # Skip non-task lines (top-level keys, blank lines, etc.)
+        # A list item starts with "  - " (2-space indent + dash)
+        if not re.match(r'^  - ', line):
+            # Check for "    prompt:" (child of a name-only list item)
+            m = re.match(r'^    prompt:\s*(.*)', line)
+            if m:
+                val = m.group(1).strip()
+                if val in ("|", ">"):
+                    joiner = "\n" if val == "|" else " "
+                    block_lines = []
+                    i += 1
+                    indent = None
+                    while i < len(lines):
+                        bline = lines[i]
+                        stripped = bline.lstrip()
+                        if not stripped:
+                            if indent is not None:
+                                block_lines.append("")
+                            i += 1
+                            continue
+                        cur_indent = len(bline) - len(stripped)
+                        if indent is None:
+                            indent = cur_indent
+                        if cur_indent < indent:
+                            break
+                        block_lines.append(bline[indent:])
+                        i += 1
+                    while block_lines and not block_lines[-1]:
+                        block_lines.pop()
+                    val = joiner.join(block_lines).strip()
+                    if val:
+                        tasks.append(val)
+                    continue
+                elif val:
+                    if (val.startswith('"') and val.endswith('"')) or \
+                       (val.startswith("'") and val.endswith("'")):
+                        val = val[1:-1]
+                    tasks.append(val)
+            i += 1
+            continue
+
+        # List item: "  - ..."
+        rest = line[4:]  # strip "  - "
+
+        # "  - name: ..." — skip, prompt follows on next line
+        if re.match(r'^name:\s*', rest):
+            i += 1
+            continue
+
+        # "  - prompt: ..." — inline or block scalar
+        m = re.match(r'^prompt:\s*(.*)', rest)
         if m:
             val = m.group(1).strip()
-            # Block scalar
-            if val in ("|", ">"):
-                joiner = "\n" if val == "|" else " "
-                block_lines = []
-                i += 1
-                while i < len(lines) and (lines[i].startswith("    ") or lines[i].strip() == ""):
-                    block_lines.append(lines[i].strip())
+        else:
+            # "  - some inline prompt text"
+            val = rest.strip()
+
+        # Block scalar
+        if val in ("|", ">"):
+            joiner = "\n" if val == "|" else " "
+            block_lines = []
+            i += 1
+            indent = None
+            while i < len(lines):
+                bline = lines[i]
+                stripped = bline.lstrip()
+                if not stripped:
+                    if indent is not None:
+                        block_lines.append("")
                     i += 1
-                val = joiner.join(block_lines).strip()
+                    continue
+                cur_indent = len(bline) - len(stripped)
+                if indent is None:
+                    indent = cur_indent
+                if cur_indent < indent:
+                    break
+                block_lines.append(bline[indent:])
+                i += 1
+            while block_lines and not block_lines[-1]:
+                block_lines.pop()
+            val = joiner.join(block_lines).strip()
+            if val:
                 tasks.append(val)
-                continue
-            # Strip quotes
-            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            continue
+
+        # Strip quotes
+        if val:
+            if (val.startswith('"') and val.endswith('"')) or \
+               (val.startswith("'") and val.endswith("'")):
                 val = val[1:-1]
-            if val and val.lower() not in ("name:", ""):
-                tasks.append(val)
+            tasks.append(val)
         i += 1
 
     if not tasks:
