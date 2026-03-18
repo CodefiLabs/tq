@@ -168,6 +168,37 @@ The migration script:
 **v1 state (`~/.tq/queues/.tq/`)** is not migrated — v2 uses SQLite (`~/.tq/tq.db`).
 If you had v1 queue files, they still work with `tq run queue.yaml`.
 
+## Session Management
+
+Sessions are tracked in SQLite with a `claude_session_id` that enables suspend/resume:
+
+```bash
+tq suspend <id>    # gracefully stop a session (resumable)
+tq resume <id>     # resume a suspended session
+tq status          # shows session IDs in brackets, e.g. [a3f5a3d0]
+```
+
+### Recovering stale tmux sessions
+
+If you have orphaned tmux sessions from before session tracking was added (or from a crash), you can extract the Claude session IDs without losing them:
+
+```bash
+# Send /exit to claude in the tmux pane — it exits and prints the resume command
+tmux send-keys -t "<session_name>:0.0" "/exit" Enter
+
+# Wait a few seconds, then grab the session ID
+tmux capture-pane -t "<session_name>:0.0" -p -S -30 | grep 'claude --resume'
+# → claude --resume 063eaae1-68a1-4638-8c1a-ab5c86252a52
+
+# Now you can safely kill the tmux session
+tmux kill-session -t "<session_name>"
+
+# And resume later from the correct project directory
+cd ~/project && claude --resume 063eaae1-68a1-4638-8c1a-ab5c86252a52
+```
+
+This works because `/exit` gracefully shuts down Claude Code's TUI but leaves the parent shell alive in tmux.
+
 ## Security
 
 - OAuth tokens read from macOS keychain at runtime — never stored in files

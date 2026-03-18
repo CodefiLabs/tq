@@ -50,6 +50,27 @@ tasks:
   - Run the test suite
 ```
 
+## Session Lifecycle
+
+```
+tq suspend <id>       # gracefully stop (resumable)
+tq resume <id>        # resume a suspended session
+tq stop <id>          # kill (non-resumable)
+```
+
+### Recovering session IDs from orphaned tmux sessions
+
+If tmux sessions exist without tracked `claude_session_id` (legacy or crash), extract IDs by sending `/exit` to the Claude TUI:
+
+```bash
+tmux send-keys -t "<tmux_session>:0.0" "/exit" Enter
+# wait a few seconds
+tmux capture-pane -t "<tmux_session>:0.0" -p -S -30 | grep 'claude --resume'
+# → claude --resume <uuid>
+```
+
+Claude exits gracefully, prints the resume command, and the tmux shell stays alive. Safe to kill the tmux session after capturing the ID.
+
 ## State
 
 All state in `~/.tq/tq.db` (SQLite). Config in `~/.tq/config.json`.

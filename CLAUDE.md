@@ -71,6 +71,51 @@ tasks:
 
 Supports: `schedule`, `reset` (daily/weekly/hourly/always), `sequential`.
 
+## Session Management
+
+Sessions spawned after v2.1.0 track `claude_session_id` in SQLite and support suspend/resume natively via `tq suspend <id>` and `tq resume <id>`.
+
+### Recovering session IDs from legacy sessions
+
+For sessions spawned before v2.1.0 (no `claude_session_id` in the database), you can extract session IDs by gracefully exiting the Claude TUI without killing the tmux window:
+
+```bash
+# Send /exit to a specific tmux pane — claude exits, prints the resume line, shell stays alive
+tmux send-keys -t "<tmux_session>:0.0" "/exit" Enter
+
+# Wait a few seconds, then capture the session ID from pane output
+tmux capture-pane -t "<tmux_session>:0.0" -p -S -30 | grep 'claude --resume'
+# Output: claude --resume <session_id>
+```
+
+To do this in bulk across all non-attached sessions:
+
+```bash
+# 1. Send /exit to all claude processes in non-attached sessions
+tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{session_attached} #{pane_pid}' | while read pane attached pid; do
+  if [ "$attached" = "0" ]; then
+    has_claude=$(pgrep -P "$pid" -f "claude" 2>/dev/null | head -1)
+    if [ -n "$has_claude" ]; then
+      tmux send-keys -t "$pane" "/exit" Enter
+    fi
+  fi
+done
+
+# 2. Wait ~10 seconds for processes to exit
+
+# 3. Harvest session IDs from pane output
+tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{session_attached}' | while read pane attached; do
+  if [ "$attached" = "0" ]; then
+    session_id=$(tmux capture-pane -t "$pane" -p -S -30 2>/dev/null | grep -oE 'claude --resume [0-9a-f-]+' | tail -1 | sed 's/claude --resume //')
+    [ -n "$session_id" ] && echo "$pane|$session_id"
+  fi
+done
+
+# 4. Kill the empty tmux sessions after saving the IDs
+```
+
+Note: autorun stage sessions may auto-destroy when claude exits (if `destroy-unattached` is set). Capture IDs quickly or accept that pipeline stages are disposable.
+
 ## Guardrails
 
 - **Hash stability** — `hashlib.sha256(prompt.encode()).hexdigest()[:8]` is the session ID
